@@ -510,7 +510,10 @@ begin
     8:
       Result := FDataView.getUint32(FPosition, True) or (FDataView.getUint32(FPosition + 4, True) shl 32);
     else
+    begin
+      console.Log('Databyte', Count);
       raise Exception.Create(ErrorMessage);
+    end;
   end;
 
   Inc(FPosition, Count);
@@ -823,15 +826,15 @@ end;
 
 procedure THdfDataTypeCompoundPart.ReadFromStream(Stream: TStream);
 var
-  Char: String;
   ByteIndex: Integer;
+  ByteValue: Integer;
   Temp: Integer; // was Byte
 begin
   FName := '';
   repeat
-    Char := Stream.ReadTextExcept(1, 'Error reading char');
-    FName := FName + Char;
-  until Char = #0;
+    ByteValue := Stream.ReadIntegerExcept(1, 'Error reading character byte');
+    FName := FName + Chr(ByteValue);
+  until ByteValue = 0;
 
   ByteIndex := 0;
   repeat
@@ -1135,7 +1138,15 @@ begin
     end;
   end;
 
-  DataObject.Data.&set(Output); // Size
+  if not Assigned(DataObject.Data) then
+    DataObject.Data := Output
+  else
+  begin
+    var OldData := DataObject.Data;
+    DataObject.Data := JUint8Array.Create(OldData.byteLength + Output.byteLength);
+    DataObject.Data.set(OldData, 0);
+    DataObject.Data.set(Output, OldData.byteLength);
+  end;
 
   var CheckSum := Stream.ReadIntegerExcept(4, 'Error reading checksum');
 end;
@@ -1512,7 +1523,7 @@ begin
       else if Temp = $20000 then
       begin
         SetLength(Value, LengthX);
-        Value[1] := Stream.ReadIntegerExcept(LengthX, 'Error reading value');
+        Value := Stream.ReadTextExcept(LengthX, 'Error reading value');
       end
       else if Temp = $20000020000 then
       begin 
