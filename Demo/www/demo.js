@@ -175,22 +175,8 @@ var TMainScreen = {
          Reader.readAsArrayBuffer(Files[0]);
       },false);
       Self.FTextArea = THtmlElement.Create$158$($New(TTextAreaElement),$AsIntf(Self,"IHtmlElementOwner"));
-      TTextAreaElement.a$4(Self.FTextArea).rows = 20;
-      TMainScreen.LoadDefault(Self);
+      TTextAreaElement.a$4(Self.FTextArea).rows = 24;
       return Self
-   }
-   ,LoadDefault:function(Self) {
-      var Request = null;
-      Request = new XMLHttpRequest();
-      Request.onload = function (_implicit_event$1) {
-         var Result = undefined;
-         TMainScreen.LoadHdfFile(Self,Request.response);
-         Result = null;
-         return Result
-      };
-      Request.responseType = "arraybuffer";
-      Request.open("GET","default.sofa",true);
-      Request.send();
    }
    ,LoadHdfFile:function(Self, Buffer) {
       var HdfFile = null;
@@ -287,6 +273,7 @@ var TFileSelect = {
    }
    ,AfterConstructor:function(Self) {
       Self.FInputFile = THtmlElement.Create$158$($New(TInputFileElement),$AsIntf(Self,"IHtmlElementOwner"));
+      TInputElement.a$21(Self.FInputFile).accept = ".hdf,.hdf5,.sofa";
    }
    ,Destroy:THtmlElement.Destroy
    ,AfterConstructor$:function($){return $.ClassType.AfterConstructor($)}
@@ -463,7 +450,7 @@ var TStream = {
       Self.FDataView = new DataView(Buffer$1);
       return Self
    }
-   ,ReadBufferExcept:function(Self, Count, ErrorMessage) {
+   ,ReadBufferExcept:function(Self, Count) {
       var Result = null;
       if (Self.FPosition+Count>Self.FDataView.byteLength) {
          throw Exception.Create($New(Exception),"Position exceeds byte length");
@@ -472,7 +459,7 @@ var TStream = {
       (Self.FPosition+= Count);
       return Result
    }
-   ,ReadIntegerExcept:function(Self, Count$1, ErrorMessage$1) {
+   ,ReadIntegerExcept:function(Self, Count$1) {
       var Result = 0;
       if (Self.FPosition+Count$1>Self.FDataView.byteLength) {
          throw Exception.Create($New(Exception),"Position exceeds byte length");
@@ -500,12 +487,12 @@ var TStream = {
             Result = Self.FDataView.getUint32(Self.FPosition,true)|(Self.FDataView.getUint32(Self.FPosition+4,true)<<32);
             break;
          default :
-            throw Exception.Create($New(Exception),ErrorMessage$1);
+            throw Exception.Create($New(Exception),"Unknown bit width");
       }
       (Self.FPosition+= Count$1);
       return Result
    }
-   ,ReadTextExcept:function(Self, Count$2, ErrorMessage$2) {
+   ,ReadTextExcept:function(Self, Count$2) {
       var Result = "";
       var Index$1 = 0;
       var ByteValue = 0;
@@ -561,36 +548,36 @@ var THdfSuperBlock = {
    ,LoadFromStream:function(Self, Stream) {
       var Identifier = 0,
          FormatSignatureVersion = 0;
-      Identifier = TStream.ReadIntegerExcept(Stream,1,"Error reading signature");
+      Identifier = TStream.ReadIntegerExcept(Stream,1);
       if (Identifier!=137) {
          throw Exception.Create($New(Exception),"The file is not a valid HDF");
       }
-      Self.FFormatSignature = TStream.ReadTextExcept(Stream,3,"Error reading signature");
+      Self.FFormatSignature = TStream.ReadTextExcept(Stream,3);
       if (Self.FFormatSignature!="HDF") {
          throw Exception.Create($New(Exception),"The file is not a valid HDF");
       }
-      FormatSignatureVersion = TStream.ReadIntegerExcept(Stream,4,"Error reading signature");
+      FormatSignatureVersion = TStream.ReadIntegerExcept(Stream,4);
       if (FormatSignatureVersion!=169478669) {
          throw Exception.Create($New(Exception),"The file is not a valid HDF");
       }
-      Self.FVersion = TStream.ReadIntegerExcept(Stream,1,"Error reading version");
+      Self.FVersion = TStream.ReadIntegerExcept(Stream,1);
       if (!((Self.FVersion==2||Self.FVersion==3))) {
          throw Exception.Create($New(Exception),"Unsupported version");
       }
-      Self.FOffsetSize = TStream.ReadIntegerExcept(Stream,1,"Error reading offset size");
-      Self.FLengthsSize = TStream.ReadIntegerExcept(Stream,1,"Error reading lengths size");
-      Self.FConsistencyFlag = TStream.ReadIntegerExcept(Stream,1,"Error reading consistency flag");
-      Self.FBaseAddress = TStream.ReadIntegerExcept(Stream,Self.FOffsetSize,"Error reading base address");
-      Self.FSuperBlockExtensionAddress = TStream.ReadIntegerExcept(Stream,Self.FOffsetSize,"Error reading superblock extension address");
-      Self.FEndOfFileAddress = TStream.ReadIntegerExcept(Stream,Self.FOffsetSize,"Error reading end of file address");
-      Self.FRootGroupObjectHeaderAddress = TStream.ReadIntegerExcept(Stream,Self.FOffsetSize,"Error reading group object header address");
+      Self.FOffsetSize = TStream.ReadIntegerExcept(Stream,1);
+      Self.FLengthsSize = TStream.ReadIntegerExcept(Stream,1);
+      Self.FConsistencyFlag = TStream.ReadIntegerExcept(Stream,1);
+      Self.FBaseAddress = TStream.ReadIntegerExcept(Stream,Self.FOffsetSize);
+      Self.FSuperBlockExtensionAddress = TStream.ReadIntegerExcept(Stream,Self.FOffsetSize);
+      Self.FEndOfFileAddress = TStream.ReadIntegerExcept(Stream,Self.FOffsetSize);
+      Self.FRootGroupObjectHeaderAddress = TStream.ReadIntegerExcept(Stream,Self.FOffsetSize);
       if (Self.FBaseAddress) {
          throw Exception.Create($New(Exception),"The base address should be zero");
       }
       if (Self.FEndOfFileAddress!=TStream.a$35(Stream)) {
          throw Exception.Create($New(Exception),"Size mismatch");
       }
-      Self.FChecksum = TStream.ReadIntegerExcept(Stream,4,"Error reading checksum");
+      Self.FChecksum = TStream.ReadIntegerExcept(Stream,4);
       if (TStream.Seek(Stream,Self.FRootGroupObjectHeaderAddress,false)!=Self.FRootGroupObjectHeaderAddress) {
          throw Exception.Create($New(Exception),"Error seeking first object");
       }
@@ -610,7 +597,7 @@ var THdfDataObjectMessage = {
       return Self
    }
    ,LoadFromStream$1:function(Self, Stream$1) {
-      Self.FVersion$1 = TStream.ReadIntegerExcept(Stream$1,1,"Error reading version");
+      Self.FVersion$1 = TStream.ReadIntegerExcept(Stream$1,1);
    }
    ,Destroy:TObject.Destroy
    ,LoadFromStream$1$:function($){return $.ClassType.LoadFromStream$1.apply($.ClassType, arguments)}
@@ -626,14 +613,14 @@ var THdfMessageLinkInfo = {
       if (Self.FVersion$1) {
          throw Exception.Create($New(Exception),"Unsupported version of link info message");
       }
-      Self.FFlags = TStream.ReadIntegerExcept(Stream$2,1,"Error reading flags");
+      Self.FFlags = TStream.ReadIntegerExcept(Stream$2,1);
       if (Self.FFlags&1) {
-         Self.FMaximumCreationIndex = TStream.ReadIntegerExcept(Stream$2,8,"Error reading maximum creation index");
+         Self.FMaximumCreationIndex = TStream.ReadIntegerExcept(Stream$2,8);
       }
-      Self.FFractalHeapAddress = TStream.ReadIntegerExcept(Stream$2,Self.FSuperBlock.FOffsetSize,"Error reading maximum creation index");
-      Self.FAddressBTreeIndex = TStream.ReadIntegerExcept(Stream$2,Self.FSuperBlock.FOffsetSize,"Error reading maximum creation index");
+      Self.FFractalHeapAddress = TStream.ReadIntegerExcept(Stream$2,Self.FSuperBlock.FOffsetSize);
+      Self.FAddressBTreeIndex = TStream.ReadIntegerExcept(Stream$2,Self.FSuperBlock.FOffsetSize);
       if (Self.FFlags&2) {
-         Self.FAddressBTreeOrder = TStream.ReadIntegerExcept(Stream$2,Self.FSuperBlock.FOffsetSize,"Error reading maximum creation index");
+         Self.FAddressBTreeOrder = TStream.ReadIntegerExcept(Stream$2,Self.FSuperBlock.FOffsetSize);
       }
    }
    ,Destroy:TObject.Destroy
@@ -648,11 +635,11 @@ var THdfMessageHeaderContinuation = {
    ,LoadFromStream$1:function(Self, Stream$3) {
       var StreamPos = 0;
       var Signature = "";
-      Self.FOffset = TStream.ReadIntegerExcept(Stream$3,Self.FSuperBlock.FOffsetSize,"Error reading offset");
-      Self.FLength = TStream.ReadIntegerExcept(Stream$3,Self.FSuperBlock.FLengthsSize,"Error reading length");
+      Self.FOffset = TStream.ReadIntegerExcept(Stream$3,Self.FSuperBlock.FOffsetSize);
+      Self.FLength = TStream.ReadIntegerExcept(Stream$3,Self.FSuperBlock.FLengthsSize);
       StreamPos = Stream$3.FPosition;
       Stream$3.FPosition = Self.FOffset;
-      Signature = TStream.ReadTextExcept(Stream$3,4,"Error reading signature");
+      Signature = TStream.ReadTextExcept(Stream$3,4);
       if (Signature!="OCHK") {
          throw Exception.Create($New(Exception),("Wrong signature ("+Signature.toString()+")"));
       }
@@ -673,14 +660,14 @@ var THdfMessageGroupInfo = {
       if (Self.FVersion$1) {
          throw Exception.Create($New(Exception),"Unsupported version of group info message");
       }
-      Self.FFlags$1 = TStream.ReadIntegerExcept(Stream$4,1,"Error reading flags");
+      Self.FFlags$1 = TStream.ReadIntegerExcept(Stream$4,1);
       if (Self.FFlags$1&1) {
-         Self.FMaximumCompact = TStream.ReadIntegerExcept(Stream$4,2,"Error reading maximum compact value");
-         Self.FMinimumDense = TStream.ReadIntegerExcept(Stream$4,2,"Error reading maximum compact value");
+         Self.FMaximumCompact = TStream.ReadIntegerExcept(Stream$4,2);
+         Self.FMinimumDense = TStream.ReadIntegerExcept(Stream$4,2);
       }
       if (Self.FFlags$1&2) {
-         Self.FEstimatedNumberOfEntries = TStream.ReadIntegerExcept(Stream$4,2,"Error reading estimated number of entries");
-         Self.FEstimatedLinkNameLength = TStream.ReadIntegerExcept(Stream$4,2,"Error reading estimated link name length of entries");
+         Self.FEstimatedNumberOfEntries = TStream.ReadIntegerExcept(Stream$4,2);
+         Self.FEstimatedLinkNameLength = TStream.ReadIntegerExcept(Stream$4,2);
       }
    }
    ,Destroy:TObject.Destroy
@@ -703,21 +690,21 @@ var THdfMessageFilterPipeline = {
       if (Self.FVersion$1!=2) {
          throw Exception.Create($New(Exception),"Unsupported version of the filter pipeline message");
       }
-      Self.FFilters = TStream.ReadIntegerExcept(Stream$5,1,"Error reading filters");
+      Self.FFilters = TStream.ReadIntegerExcept(Stream$5,1);
       if (Self.FFilters>32) {
          throw Exception.Create($New(Exception),"filter pipeline message has too many filters");
       }
       var $temp5;
       for(Index$2=0,$temp5=Self.FFilters;Index$2<$temp5;Index$2++) {
-         FilterIdentificationValue = TStream.ReadIntegerExcept(Stream$5,2,"Error reading filter identification value");
+         FilterIdentificationValue = TStream.ReadIntegerExcept(Stream$5,2);
          if (([1,2].indexOf(~FilterIdentificationValue)>=0)) {
             throw Exception.Create($New(Exception),"Unsupported filter");
          }
-         Flags$1 = TStream.ReadIntegerExcept(Stream$5,2,"Error reading flags");
-         NumberClientDataValues = TStream.ReadIntegerExcept(Stream$5,2,"Error reading number client data values");
+         Flags$1 = TStream.ReadIntegerExcept(Stream$5,2);
+         NumberClientDataValues = TStream.ReadIntegerExcept(Stream$5,2);
          var $temp6;
          for(ValueIndex=0,$temp6=NumberClientDataValues;ValueIndex<$temp6;ValueIndex++) {
-            ClientData = TStream.ReadIntegerExcept(Stream$5,4,"Error reading client data");
+            ClientData = TStream.ReadIntegerExcept(Stream$5,4);
          }
       }
    }
@@ -739,10 +726,10 @@ var THdfMessageDataType = {
       if (!((Self.FVersion$1==1||Self.FVersion$1==3))) {
          throw Exception.Create($New(Exception),"Unsupported version of data type message");
       }
-      Self.FClassBitField[0] = TStream.ReadIntegerExcept(Stream$6,1,"Error reading class bit field");
-      Self.FClassBitField[1] = TStream.ReadIntegerExcept(Stream$6,1,"Error reading class bit field");
-      Self.FClassBitField[2] = TStream.ReadIntegerExcept(Stream$6,1,"Error reading class bit field");
-      Self.FSize = TStream.ReadIntegerExcept(Stream$6,4,"Error reading size");
+      Self.FClassBitField[0] = TStream.ReadIntegerExcept(Stream$6,1);
+      Self.FClassBitField[1] = TStream.ReadIntegerExcept(Stream$6,1);
+      Self.FClassBitField[2] = TStream.ReadIntegerExcept(Stream$6,1);
+      Self.FSize = TStream.ReadIntegerExcept(Stream$6,4);
       switch (Self.FDataClass) {
          case 0 :
             Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeFixedPoint),Self);
@@ -811,22 +798,22 @@ var THdfMessageDataSpace = {
       if (!((Self.FVersion$1==1||Self.FVersion$1==2))) {
          throw Exception.Create($New(Exception),"Unsupported version of dataspace message");
       }
-      Self.FDimensionality = TStream.ReadIntegerExcept(Stream$7,1,"Error reading dimensionality");
-      Self.FFlags$2 = TStream.ReadIntegerExcept(Stream$7,1,"Error reading flags");
+      Self.FDimensionality = TStream.ReadIntegerExcept(Stream$7,1);
+      Self.FFlags$2 = TStream.ReadIntegerExcept(Stream$7,1);
       if (Self.FVersion$1==1) {
          TStream.Seek(Stream$7,5,true);
          throw Exception.Create($New(Exception),"Unsupported version of dataspace message");
       }
-      Self.FType = TStream.ReadIntegerExcept(Stream$7,1,"Error reading type");
+      Self.FType = TStream.ReadIntegerExcept(Stream$7,1);
       var $temp7;
       for(Index$4=0,$temp7=Self.FDimensionality;Index$4<$temp7;Index$4++) {
-         Size$2 = TStream.ReadIntegerExcept(Stream$7,Self.FSuperBlock.FLengthsSize,"Error reading dimension size");
+         Size$2 = TStream.ReadIntegerExcept(Stream$7,Self.FSuperBlock.FLengthsSize);
          Self.FDimensionSize.push(Size$2);
       }
       if (Self.FFlags$2&1) {
          var $temp8;
          for(Index$4=0,$temp8=Self.FDimensionality;Index$4<$temp8;Index$4++) {
-            MaxSize = TStream.ReadIntegerExcept(Stream$7,Self.FSuperBlock.FLengthsSize,"Error reading dimension size");
+            MaxSize = TStream.ReadIntegerExcept(Stream$7,Self.FSuperBlock.FLengthsSize);
             Self.FDimensionMaxSize.push(MaxSize);
          }
       }
@@ -867,14 +854,14 @@ var THdfMessageDataLayout = {
          sx = 0,
          ByteIndex = 0;
       var b$1 = 0,
-         x$12 = 0,
+         x$14 = 0,
          sx$1 = 0,
          sy = 0,
          dy$1 = 0,
          ByteIndex$1 = 0;
       var b$2 = 0,
-         x$13 = 0,
-         y$12 = 0,
+         x$15 = 0,
+         y$14 = 0,
          sx$2 = 0,
          sy$1 = 0,
          sz = 0,
@@ -882,23 +869,23 @@ var THdfMessageDataLayout = {
          dz = 0,
          ByteIndex$2 = 0;
       var b$3 = 0,
-         x$14 = 0,
+         x$16 = 0,
          z$2 = 0,
-         y$13 = 0,
+         y$15 = 0,
          OldData = null,
          CheckSum = 0;
       if (Self.FDataObject.FDataSpace.FDimensionality>3) {
          throw Exception.Create($New(EHdfInvalidFormat),"Error reading dimensions");
       }
-      Signature$1 = TStream.ReadTextExcept(Stream$8,4,"Error reading signature");
+      Signature$1 = TStream.ReadTextExcept(Stream$8,4);
       if (Signature$1!="TREE") {
          throw Exception.Create($New(Exception),("Wrong signature ("+Signature$1.toString()+")"));
       }
-      NodeType = TStream.ReadIntegerExcept(Stream$8,1,"Error reading node type");
-      NodeLevel = TStream.ReadIntegerExcept(Stream$8,1,"Error reading node level");
-      EntriesUsed = TStream.ReadIntegerExcept(Stream$8,2,"Error reading entries used");
-      AddressLeftSibling = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FOffsetSize,"Error reading left sibling address");
-      AddressRightSibling = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FOffsetSize,"Error reading right sibling address");
+      NodeType = TStream.ReadIntegerExcept(Stream$8,1);
+      NodeLevel = TStream.ReadIntegerExcept(Stream$8,1);
+      EntriesUsed = TStream.ReadIntegerExcept(Stream$8,2);
+      AddressLeftSibling = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FOffsetSize);
+      AddressRightSibling = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FOffsetSize);
       Elements = 1;
       var $temp9;
       for(DimensionIndex=0,$temp9=Self.FDataObject.FDataSpace.FDimensionality;DimensionIndex<$temp9;DimensionIndex++) {
@@ -909,26 +896,26 @@ var THdfMessageDataLayout = {
       var $temp10;
       for(ElementIndex=0,$temp10=(EntriesUsed*2);ElementIndex<$temp10;ElementIndex++) {
          if (!NodeType) {
-            Key = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FLengthsSize,"Error reading keys");
+            Key = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FLengthsSize);
          } else {
-            ChunkSize = TStream.ReadIntegerExcept(Stream$8,4,"Error reading chunk size");
-            FilterMask = TStream.ReadIntegerExcept(Stream$8,4,"Error reading filter mask");
+            ChunkSize = TStream.ReadIntegerExcept(Stream$8,4);
+            FilterMask = TStream.ReadIntegerExcept(Stream$8,4);
             if (FilterMask) {
                throw Exception.Create($New(Exception),"All filters must be enabled");
             }
             var $temp11;
             for(DimensionIndex$1=0,$temp11=Self.FDataObject.FDataSpace.FDimensionality;DimensionIndex$1<$temp11;DimensionIndex$1++) {
-               StartPos = TStream.ReadIntegerExcept(Stream$8,8,"Error reading start");
+               StartPos = TStream.ReadIntegerExcept(Stream$8,8);
                Start.push(StartPos);
             }
-            BreakCondition = TStream.ReadIntegerExcept(Stream$8,8,"Error reading break condition");
+            BreakCondition = TStream.ReadIntegerExcept(Stream$8,8);
             if (BreakCondition) {
                break;
             }
-            ChildPointer = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FOffsetSize,"Error reading child pointer");
+            ChildPointer = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FOffsetSize);
             StreamPos$1 = Stream$8.FPosition;
             Stream$8.FPosition = ChildPointer;
-            ByteData = TStream.ReadBufferExcept(Stream$8,ChunkSize,"Error reading buffer");
+            ByteData = TStream.ReadBufferExcept(Stream$8,ChunkSize);
             Inflate = new Zlib.Inflate(ByteData);
             Input = Inflate.decompress();
             $Assert(Input.byteLength==Elements*ElementSize,"","");
@@ -938,9 +925,9 @@ var THdfMessageDataLayout = {
                   var $temp12;
                   for(ByteIndex=0,$temp12=(Elements*ElementSize);ByteIndex<$temp12;ByteIndex++) {
                      b$1 = $Div(ByteIndex,Elements);
-                     x$12 = ByteIndex%Elements+Start[0];
-                     if (x$12<sx) {
-                        Output[(x$12*ElementSize+b$1)]=Input[ByteIndex];
+                     x$14 = ByteIndex%Elements+Start[0];
+                     if (x$14<sx) {
+                        Output[(x$14*ElementSize+b$1)]=Input[ByteIndex];
                      }
                   }
                   break;
@@ -951,11 +938,11 @@ var THdfMessageDataLayout = {
                   var $temp13;
                   for(ByteIndex$1=0,$temp13=(Elements*ElementSize);ByteIndex$1<$temp13;ByteIndex$1++) {
                      b$2 = $Div(ByteIndex$1,Elements);
-                     x$13 = ByteIndex$1%Elements;
-                     y$12 = x$13%dy$1+Start[1];
-                     x$13 = ($Div(x$13,dy$1))+Start[0];
-                     if (y$12<sy&&x$13<sx$1) {
-                        Output[((x$13*sy+y$12)*ElementSize+b$2)]=Input[ByteIndex$1];
+                     x$15 = ByteIndex$1%Elements;
+                     y$14 = x$15%dy$1+Start[1];
+                     x$15 = ($Div(x$15,dy$1))+Start[0];
+                     if (y$14<sy&&x$15<sx$1) {
+                        Output[((x$15*sy+y$14)*ElementSize+b$2)]=Input[ByteIndex$1];
                      }
                   }
                   break;
@@ -968,12 +955,12 @@ var THdfMessageDataLayout = {
                   var $temp14;
                   for(ByteIndex$2=0,$temp14=(Elements*ElementSize);ByteIndex$2<$temp14;ByteIndex$2++) {
                      b$3 = $Div(ByteIndex$2,Elements);
-                     x$14 = ByteIndex$2%Elements;
-                     z$2 = x$14%dz+Start[2];
-                     y$13 = ($Div(x$14,dz))%dy$2+Start[1];
-                     x$14 = ($Div(x$14,dy$2*dz))+Start[0];
-                     if (z$2<sz&&y$13<sy$1&&x$14<sx$2) {
-                        Output[((x$14*sz*sy$1+y$13*sz+z$2)*ElementSize+b$3)]=Input[ByteIndex$2];
+                     x$16 = ByteIndex$2%Elements;
+                     z$2 = x$16%dz+Start[2];
+                     y$15 = ($Div(x$16,dz))%dy$2+Start[1];
+                     x$16 = ($Div(x$16,dy$2*dz))+Start[0];
+                     if (z$2<sz&&y$15<sy$1&&x$16<sx$2) {
+                        Output[((x$16*sz*sy$1+y$15*sz+z$2)*ElementSize+b$3)]=Input[ByteIndex$2];
                      }
                   }
                   break;
@@ -989,7 +976,7 @@ var THdfMessageDataLayout = {
       } else {
          Self.FDataObject.FData = Output;
       }
-      CheckSum = TStream.ReadIntegerExcept(Stream$8,4,"Error reading checksum");
+      CheckSum = TStream.ReadIntegerExcept(Stream$8,4);
    }
    ,LoadFromStream$1:function(Self, Stream$9) {
       var Index$5 = 0;
@@ -1000,28 +987,28 @@ var THdfMessageDataLayout = {
       if (Self.FVersion$1!=3) {
          throw Exception.Create($New(Exception),"Unsupported version of data layout message");
       }
-      Self.FLayoutClass = TStream.ReadIntegerExcept(Stream$9,1,"Error reading layout class");
+      Self.FLayoutClass = TStream.ReadIntegerExcept(Stream$9,1);
       switch (Self.FLayoutClass) {
          case 0 :
-            Self.FDataSize = TStream.ReadIntegerExcept(Stream$9,2,"Error reading data size");
-            Self.FDataObject.FData = TStream.ReadBufferExcept(Stream$9,Self.FDataSize,"Error reading from buffer");
+            Self.FDataSize = TStream.ReadIntegerExcept(Stream$9,2);
+            Self.FDataObject.FData = TStream.ReadBufferExcept(Stream$9,Self.FDataSize);
             break;
          case 1 :
-            Self.FDataAddress = TStream.ReadIntegerExcept(Stream$9,Self.FSuperBlock.FOffsetSize,"Error reading data address");
-            Self.FDataSize = TStream.ReadIntegerExcept(Stream$9,Self.FSuperBlock.FLengthsSize,"Error reading data lengths");
+            Self.FDataAddress = TStream.ReadIntegerExcept(Stream$9,Self.FSuperBlock.FOffsetSize);
+            Self.FDataSize = TStream.ReadIntegerExcept(Stream$9,Self.FSuperBlock.FLengthsSize);
             if (Self.FDataAddress>0) {
                StreamPos$2 = Stream$9.FPosition;
                Stream$9.FPosition = Self.FDataAddress;
-               Self.FDataObject.FData = TStream.ReadBufferExcept(Stream$9,Self.FDataSize,"Error reading from buffer");
+               Self.FDataObject.FData = TStream.ReadBufferExcept(Stream$9,Self.FDataSize);
                Stream$9.FPosition = StreamPos$2;
             }
             break;
          case 2 :
-            Self.FDimensionality$1 = TStream.ReadIntegerExcept(Stream$9,1,"Error reading dimensionality");
-            Self.FDataAddress = TStream.ReadIntegerExcept(Stream$9,Self.FSuperBlock.FOffsetSize,"Error reading data address");
+            Self.FDimensionality$1 = TStream.ReadIntegerExcept(Stream$9,1);
+            Self.FDataAddress = TStream.ReadIntegerExcept(Stream$9,Self.FSuperBlock.FOffsetSize);
             var $temp15;
             for(Index$5=0,$temp15=Self.FDimensionality$1;Index$5<$temp15;Index$5++) {
-               DataLayoutChunk$1 = TStream.ReadIntegerExcept(Stream$9,4,"Error reading data layout chunk");
+               DataLayoutChunk$1 = TStream.ReadIntegerExcept(Stream$9,4);
                Self.FDataObject.FDataLayoutChunk.push(DataLayoutChunk$1);
             }
             Size$4 = Self.FDataObject.FDataLayoutChunk[Self.FDimensionality$1-1];
@@ -1052,9 +1039,9 @@ var THdfMessageDataFill = {
       if (Self.FVersion$1!=3) {
          throw Exception.Create($New(Exception),"Unsupported version of data fill message");
       }
-      Self.FFlags$3 = TStream.ReadIntegerExcept(Stream$10,1,"Error reading flags");
+      Self.FFlags$3 = TStream.ReadIntegerExcept(Stream$10,1);
       if (Self.FFlags$3&(1<<5)) {
-         Self.FSize$1 = TStream.ReadIntegerExcept(Stream$10,4,"Error reading size");
+         Self.FSize$1 = TStream.ReadIntegerExcept(Stream$10,4);
          TStream.Seek(Stream$10,Self.FSize$1,true);
       }
    }
@@ -1072,14 +1059,14 @@ var THdfMessageAttributeInfo = {
       if (Self.FVersion$1) {
          throw Exception.Create($New(Exception),"Unsupported version of attribute info message");
       }
-      Self.FFlags$4 = TStream.ReadIntegerExcept(Stream$11,1,"Error reading flags");
+      Self.FFlags$4 = TStream.ReadIntegerExcept(Stream$11,1);
       if (Self.FFlags$4&1) {
-         Self.FMaximumCreationIndex$1 = TStream.ReadIntegerExcept(Stream$11,2,"Error reading maximum creation index");
+         Self.FMaximumCreationIndex$1 = TStream.ReadIntegerExcept(Stream$11,2);
       }
-      Self.FFractalHeapAddress$1 = TStream.ReadIntegerExcept(Stream$11,Self.FSuperBlock.FOffsetSize,"Error reading fractal heap address");
-      Self.FAttributeNameBTreeAddress = TStream.ReadIntegerExcept(Stream$11,Self.FSuperBlock.FOffsetSize,"Error reading attribute name B-tree address");
+      Self.FFractalHeapAddress$1 = TStream.ReadIntegerExcept(Stream$11,Self.FSuperBlock.FOffsetSize);
+      Self.FAttributeNameBTreeAddress = TStream.ReadIntegerExcept(Stream$11,Self.FSuperBlock.FOffsetSize);
       if (Self.FFlags$4&2) {
-         Self.FAttributeOrderBTreeAddress = TStream.ReadIntegerExcept(Stream$11,Self.FSuperBlock.FOffsetSize,"Error reading attribute order B-tree address");
+         Self.FAttributeOrderBTreeAddress = TStream.ReadIntegerExcept(Stream$11,Self.FSuperBlock.FOffsetSize);
       }
    }
    ,Destroy:TObject.Destroy
@@ -1099,12 +1086,12 @@ var THdfMessageAttribute = {
       if (Self.FVersion$1!=3) {
          throw Exception.Create($New(Exception),"Unsupported version of group info message");
       }
-      Self.FFlags$5 = TStream.ReadIntegerExcept(Stream$12,1,"Error reading flags");
-      Self.FNameSize = TStream.ReadIntegerExcept(Stream$12,2,"Error reading name size");
-      Self.FDatatypeSize = TStream.ReadIntegerExcept(Stream$12,2,"Error reading datatype size");
-      Self.FDataspaceSize = TStream.ReadIntegerExcept(Stream$12,2,"Error reading dataspace size");
-      Self.FEncoding = TStream.ReadIntegerExcept(Stream$12,1,"Error reading encoding");
-      Self.FName$1 = TStream.ReadTextExcept(Stream$12,Self.FNameSize,"Error reading name");
+      Self.FFlags$5 = TStream.ReadIntegerExcept(Stream$12,1);
+      Self.FNameSize = TStream.ReadIntegerExcept(Stream$12,2);
+      Self.FDatatypeSize = TStream.ReadIntegerExcept(Stream$12,2);
+      Self.FDataspaceSize = TStream.ReadIntegerExcept(Stream$12,2);
+      Self.FEncoding = TStream.ReadIntegerExcept(Stream$12,1);
+      Self.FName$1 = TStream.ReadTextExcept(Stream$12,Self.FNameSize);
       Self.FDatatypeMessage = THdfDataObjectMessage.Create$251($New(THdfMessageDataType),Self.FSuperBlock,Self.FDataObject);
       THdfDataObjectMessage.LoadFromStream$1$(Self.FDatatypeMessage,Stream$12);
       Self.FDataspaceMessage = THdfDataObjectMessage.Create$251($New(THdfMessageDataSpace),Self.FSuperBlock,Self.FDataObject);
@@ -1126,21 +1113,21 @@ var THdfMessageAttribute = {
       switch (Self.FDatatypeMessage.FDataClass) {
          case 3 :
             SetLength(Name$6,Self.FDatatypeMessage.FSize);
-            Name$6.v = TStream.ReadTextExcept(Stream$13,Self.FDatatypeMessage.FSize,"Error reading string");
+            Name$6.v = TStream.ReadTextExcept(Stream$13,Self.FDatatypeMessage.FSize);
             THdfAttribute.SetValueAsString(Attribute$1,Name$6.v);
             break;
          case 6 :
             TStream.Seek(Stream$13,Self.FDatatypeMessage.FSize,true);
             break;
          case 7 :
-            Value$7 = TStream.ReadIntegerExcept(Stream$13,4,"Error reading value");
+            Value$7 = TStream.ReadIntegerExcept(Stream$13,4);
             THdfAttribute.SetValueAsInteger(Attribute$1,Value$7);
             break;
          case 9 :
-            Dimension$1 = TStream.ReadIntegerExcept(Stream$13,4,"Error reading dimension");
-            EndAddress = TStream.ReadIntegerExcept(Stream$13,4,"Error reading end address");
-            Value$7 = TStream.ReadIntegerExcept(Stream$13,4,"Error reading value");
-            Value$7 = TStream.ReadIntegerExcept(Stream$13,4,"Error reading value");
+            Dimension$1 = TStream.ReadIntegerExcept(Stream$13,4);
+            EndAddress = TStream.ReadIntegerExcept(Stream$13,4);
+            Value$7 = TStream.ReadIntegerExcept(Stream$13,4);
+            Value$7 = TStream.ReadIntegerExcept(Stream$13,4);
             break;
          default :
             throw Exception.Create($New(Exception),"Error: unknown data class");
@@ -1177,17 +1164,17 @@ var THdfCustomBlock = {
       return Self
    }
    ,LoadFromStream$12:function(Self, Stream$15) {
-      Self.FSignature = TStream.ReadTextExcept(Stream$15,4,"Error reading signature");
+      Self.FSignature = TStream.ReadTextExcept(Stream$15,4);
       if (Self.FSignature!=THdfCustomBlock.GetSignature$(Self.ClassType)) {
          throw Exception.Create($New(Exception),("Wrong signature ("+Self.FSignature.toString()+")"));
       }
-      Self.FVersion$2 = TStream.ReadIntegerExcept(Stream$15,1,"Error reading version");
+      Self.FVersion$2 = TStream.ReadIntegerExcept(Stream$15,1);
       if (Self.FVersion$2) {
          throw Exception.Create($New(Exception),"Unsupported version of link info message");
       }
-      Self.FHeapHeaderAddress = TStream.ReadIntegerExcept(Stream$15,Self.FSuperBlock$1.FOffsetSize,"Error reading heap header address");
+      Self.FHeapHeaderAddress = TStream.ReadIntegerExcept(Stream$15,Self.FSuperBlock$1.FOffsetSize);
       Self.FBlockOffset = 0;
-      Self.FBlockOffset = TStream.ReadIntegerExcept(Stream$15,$Div(Self.FFractalHeap.FMaximumHeapSize+7,8),"Error reading block offset");
+      Self.FBlockOffset = TStream.ReadIntegerExcept(Stream$15,$Div(Self.FFractalHeap.FMaximumHeapSize+7,8));
    }
    ,Destroy:TObject.Destroy
    ,Create$252$:function($){return $.ClassType.Create$252.apply($.ClassType, arguments)}
@@ -1231,10 +1218,10 @@ var THdfIndirectBlock = {
       n = k-Self.FMaximumNumberOfDirectBlockRows*Self.FFractalHeap.FTableWidth;
       while (k>0) {
          ChildBlockAddress = 0;
-         ChildBlockAddress = TStream.ReadIntegerExcept(Stream$16,Self.FSuperBlock$1.FOffsetSize,"Error reading child direct block address");
+         ChildBlockAddress = TStream.ReadIntegerExcept(Stream$16,Self.FSuperBlock$1.FOffsetSize);
          if (Self.FFractalHeap.FEncodedLength>0) {
-            SizeOfFilteredDirectBlock = TStream.ReadIntegerExcept(Stream$16,Self.FSuperBlock$1.FLengthsSize,"Error reading filtered direct block");
-            FilterMaskForDirectBlock = TStream.ReadIntegerExcept(Stream$16,4,"Error reading filter mask");
+            SizeOfFilteredDirectBlock = TStream.ReadIntegerExcept(Stream$16,Self.FSuperBlock$1.FLengthsSize);
+            FilterMaskForDirectBlock = TStream.ReadIntegerExcept(Stream$16,4);
          }
          if (ChildBlockAddress>0&&ChildBlockAddress<Self.FSuperBlock$1.FEndOfFileAddress) {
             StreamPosition = Stream$16.FPosition;
@@ -1247,7 +1234,7 @@ var THdfIndirectBlock = {
       }
       while (n>0) {
          ChildBlockAddress = 0;
-         ChildBlockAddress = TStream.ReadIntegerExcept(Stream$16,Self.FSuperBlock$1.FOffsetSize,"Error reading child direct block address");
+         ChildBlockAddress = TStream.ReadIntegerExcept(Stream$16,Self.FSuperBlock$1.FOffsetSize);
          if (ChildBlockAddress>0&&ChildBlockAddress<Self.FSuperBlock$1.FEndOfFileAddress) {
             StreamPosition = Stream$16.FPosition;
             Stream$16.FPosition = ChildBlockAddress;
@@ -1278,40 +1265,40 @@ var THdfFractalHeap = {
    }
    ,LoadFromStream$14:function(Self, Stream$17) {
       var Block$1 = null;
-      Self.FSignature$1 = TStream.ReadTextExcept(Stream$17,4,"Error reading signature");
+      Self.FSignature$1 = TStream.ReadTextExcept(Stream$17,4);
       if (Self.FSignature$1!="FRHP") {
          throw Exception.Create($New(Exception),("Wrong signature ("+Self.FSignature$1.toString()+")"));
       }
-      Self.FVersion$3 = TStream.ReadIntegerExcept(Stream$17,1,"Error reading version");
+      Self.FVersion$3 = TStream.ReadIntegerExcept(Stream$17,1);
       if (Self.FVersion$3) {
          throw Exception.Create($New(Exception),"Unsupported version of link info message");
       }
-      Self.FHeapIdLength = TStream.ReadIntegerExcept(Stream$17,2,"Error reading heap ID length");
-      Self.FEncodedLength = TStream.ReadIntegerExcept(Stream$17,2,"Error reading I\/O filters' encoded length");
-      Self.FFlags$6 = TStream.ReadIntegerExcept(Stream$17,1,"Error reading flags");
-      Self.FMaximumSize = TStream.ReadIntegerExcept(Stream$17,4,"Error reading maximum size");
-      Self.FNextHugeID = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading next huge ID");
-      Self.FBtreeAddresses = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FOffsetSize,"Error reading Btree Addresses");
-      Self.FAmountFreeSpace = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading amount of free space");
-      Self.FAddressManagedBlock = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FOffsetSize,"Error reading offset size");
-      Self.FAmountManagedSpace = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading amount of managed space");
-      Self.FAmountAllocatedManagedSpace = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading amount of allocated managed space");
-      Self.FOffsetDirectBlockAllocation = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading offset of direct block allocation");
-      Self.FNumberOfManagedObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading number of managed object");
-      Self.FSizeOfHugeObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading size of huge objects");
-      Self.FNumberOfHugeObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading number of huge objects");
-      Self.FSizeOfTinyObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading size of tiny objects");
-      Self.FNumberOfTinyObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading number of tiny objects");
-      Self.FTableWidth = TStream.ReadIntegerExcept(Stream$17,2,"Error reading table width");
-      Self.FStartingBlockSize = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading starting block size");
-      Self.FMaximumDirectBlockSize = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading maximum direct block size");
-      Self.FMaximumHeapSize = TStream.ReadIntegerExcept(Stream$17,2,"Error reading maximum heap size");
-      Self.FStartingNumber = TStream.ReadIntegerExcept(Stream$17,2,"Error reading starting number");
-      Self.FAddressOfRootBlock = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FOffsetSize,"Error reading address of root block");
-      Self.FCurrentNumberOfRows = TStream.ReadIntegerExcept(Stream$17,2,"Error reading current number of rows");
+      Self.FHeapIdLength = TStream.ReadIntegerExcept(Stream$17,2);
+      Self.FEncodedLength = TStream.ReadIntegerExcept(Stream$17,2);
+      Self.FFlags$6 = TStream.ReadIntegerExcept(Stream$17,1);
+      Self.FMaximumSize = TStream.ReadIntegerExcept(Stream$17,4);
+      Self.FNextHugeID = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FBtreeAddresses = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FOffsetSize);
+      Self.FAmountFreeSpace = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FAddressManagedBlock = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FOffsetSize);
+      Self.FAmountManagedSpace = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FAmountAllocatedManagedSpace = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FOffsetDirectBlockAllocation = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FNumberOfManagedObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FSizeOfHugeObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FNumberOfHugeObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FSizeOfTinyObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FNumberOfTinyObjects = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FTableWidth = TStream.ReadIntegerExcept(Stream$17,2);
+      Self.FStartingBlockSize = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FMaximumDirectBlockSize = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+      Self.FMaximumHeapSize = TStream.ReadIntegerExcept(Stream$17,2);
+      Self.FStartingNumber = TStream.ReadIntegerExcept(Stream$17,2);
+      Self.FAddressOfRootBlock = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FOffsetSize);
+      Self.FCurrentNumberOfRows = TStream.ReadIntegerExcept(Stream$17,2);
       if (Self.FEncodedLength>0) {
-         Self.FSizeOfFilteredRootDirectBlock = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize,"Error reading the size of filtered root direct blocks");
-         Self.FIOFilterMask = TStream.ReadIntegerExcept(Stream$17,4,"Error reading I\/O filter mask");
+         Self.FSizeOfFilteredRootDirectBlock = TStream.ReadIntegerExcept(Stream$17,Self.FSuperBlock$2.FLengthsSize);
+         Self.FIOFilterMask = TStream.ReadIntegerExcept(Stream$17,4);
       }
       if (Self.FNumberOfHugeObjects>0) {
          throw Exception.Create($New(Exception),"Cannot handle huge objects");
@@ -1378,7 +1365,7 @@ var THdfDirectBlock = {
          Temp$1 = 0;
       THdfCustomBlock.LoadFromStream$12(Self,Stream$19);
       if (Self.FFractalHeap.FFlags$6&2) {
-         Self.FChecksum$1 = TStream.ReadIntegerExcept(Stream$19,4,"Error reading checksum");
+         Self.FChecksum$1 = TStream.ReadIntegerExcept(Stream$19,4);
       }
       OffsetSize$1 = Math.ceil(Log2(Self.FFractalHeap.FMaximumHeapSize)/8);
       if (Self.FFractalHeap.FMaximumDirectBlockSize<Self.FFractalHeap.FMaximumSize) {
@@ -1387,29 +1374,29 @@ var THdfDirectBlock = {
          LengthSize = Math.ceil(Log2(Self.FFractalHeap.FMaximumSize)/8);
       }
       do {
-         TypeAndVersion = TStream.ReadIntegerExcept(Stream$19,1,"Error reading type and version");
+         TypeAndVersion = TStream.ReadIntegerExcept(Stream$19,1);
          OffsetX = 0;
          LengthX = 0;
-         OffsetX = TStream.ReadIntegerExcept(Stream$19,OffsetSize$1,"Error reading offset");
-         LengthX = TStream.ReadIntegerExcept(Stream$19,LengthSize,"Error reading length");
+         OffsetX = TStream.ReadIntegerExcept(Stream$19,OffsetSize$1);
+         LengthX = TStream.ReadIntegerExcept(Stream$19,LengthSize);
          if (TypeAndVersion==3) {
             Temp = 0;
-            Temp = TStream.ReadIntegerExcept(Stream$19,5,"Error reading magic");
+            Temp = TStream.ReadIntegerExcept(Stream$19,5);
             if (Temp!=262152) {
                throw Exception.Create($New(Exception),"Unsupported values");
             }
-            Name$7 = TStream.ReadTextExcept(Stream$19,LengthX,"Error reading name");
+            Name$7 = TStream.ReadTextExcept(Stream$19,LengthX);
             Temp = 0;
-            Temp = TStream.ReadIntegerExcept(Stream$19,4,"Error reading magic");
+            Temp = TStream.ReadIntegerExcept(Stream$19,4);
             if (Temp!=19) {
                throw Exception.Create($New(Exception),"Unsupported values");
             }
-            LengthX = TStream.ReadIntegerExcept(Stream$19,2,"Error reading length");
-            ValueType = TStream.ReadIntegerExcept(Stream$19,4,"Error reading unknown value");
-            TypeExtend = TStream.ReadIntegerExcept(Stream$19,2,"Error reading unknown value");
+            LengthX = TStream.ReadIntegerExcept(Stream$19,2);
+            ValueType = TStream.ReadIntegerExcept(Stream$19,4);
+            TypeExtend = TStream.ReadIntegerExcept(Stream$19,2);
             if (ValueType==131072) {
                if (!TypeExtend) {
-                  Value$8 = TStream.ReadTextExcept(Stream$19,LengthX,"Error reading value");
+                  Value$8 = TStream.ReadTextExcept(Stream$19,LengthX);
                } else if (TypeExtend==200) {
                   Value$8 = "";
                }
@@ -1419,13 +1406,13 @@ var THdfDirectBlock = {
             THdfDataObject.AddAttribute(Self.FDataObject$1,Attribute$3);
          } else if (TypeAndVersion==1) {
             Temp$1 = 0;
-            Temp$1 = TStream.ReadIntegerExcept(Stream$19,6,"Error reading magic");
+            Temp$1 = TStream.ReadIntegerExcept(Stream$19,6);
             if (Temp$1) {
                throw Exception.Create($New(Exception),"FHDB type 1 unsupported values");
             }
-            LengthX = TStream.ReadIntegerExcept(Stream$19,1,"Error reading length");
-            Name$7 = TStream.ReadTextExcept(Stream$19,LengthX,"Error reading name");
-            HeapHeaderAddress = TStream.ReadIntegerExcept(Stream$19,Self.FSuperBlock$1.FOffsetSize,"Error reading heap header address");
+            LengthX = TStream.ReadIntegerExcept(Stream$19,1);
+            Name$7 = TStream.ReadTextExcept(Stream$19,LengthX);
+            HeapHeaderAddress = TStream.ReadIntegerExcept(Stream$19,Self.FSuperBlock$1.FOffsetSize);
             StreamPos$3 = Stream$19.FPosition;
             Stream$19.FPosition = HeapHeaderAddress;
             SubDataObject = THdfDataObject.Create$261($New(THdfDataObject),Self.FSuperBlock$1,Name$7);
@@ -1482,7 +1469,7 @@ var THdfDataTypeTime = {
       $.FBitPrecision = 0;
    }
    ,LoadFromStream$17:function(Self, Stream$22) {
-      Self.FBitPrecision = TStream.ReadIntegerExcept(Stream$22,2,"Error reading bit precision");
+      Self.FBitPrecision = TStream.ReadIntegerExcept(Stream$22,2);
    }
    ,Destroy:TObject.Destroy
    ,Create$256:THdfBaseDataType.Create$256
@@ -1522,13 +1509,13 @@ var THdfDataTypeFloatingPoint = {
       $.FBitOffset = $.FBitPrecision$1 = $.FExponentBias = $.FExponentLocation = $.FExponentSize = $.FMantissaLocation = $.FMantissaSize = 0;
    }
    ,LoadFromStream$17:function(Self, Stream$23) {
-      Self.FBitOffset = TStream.ReadIntegerExcept(Stream$23,2,"Error reading bit offset");
-      Self.FBitPrecision$1 = TStream.ReadIntegerExcept(Stream$23,2,"Error reading bit precision");
-      Self.FExponentLocation = TStream.ReadIntegerExcept(Stream$23,1,"Error reading exponent location");
-      Self.FExponentSize = TStream.ReadIntegerExcept(Stream$23,1,"Error reading exponent size");
-      Self.FMantissaLocation = TStream.ReadIntegerExcept(Stream$23,1,"Error reading mantissa location");
-      Self.FMantissaSize = TStream.ReadIntegerExcept(Stream$23,1,"Error reading mantissa size");
-      Self.FExponentBias = TStream.ReadIntegerExcept(Stream$23,4,"Error reading exponent bias");
+      Self.FBitOffset = TStream.ReadIntegerExcept(Stream$23,2);
+      Self.FBitPrecision$1 = TStream.ReadIntegerExcept(Stream$23,2);
+      Self.FExponentLocation = TStream.ReadIntegerExcept(Stream$23,1);
+      Self.FExponentSize = TStream.ReadIntegerExcept(Stream$23,1);
+      Self.FMantissaLocation = TStream.ReadIntegerExcept(Stream$23,1);
+      Self.FMantissaSize = TStream.ReadIntegerExcept(Stream$23,1);
+      Self.FExponentBias = TStream.ReadIntegerExcept(Stream$23,4);
       if (Self.FBitOffset) {
          throw Exception.Create($New(Exception),"Unsupported bit offset");
       }
@@ -1577,8 +1564,8 @@ var THdfDataTypeFixedPoint = {
    }
    ,LoadFromStream$17:function(Self, Stream$24) {
       THdfBaseDataType.LoadFromStream$17(Self,Stream$24);
-      Self.FBitOffset$1 = TStream.ReadIntegerExcept(Stream$24,2,"Error reading bit offset");
-      Self.FBitPrecision$2 = TStream.ReadIntegerExcept(Stream$24,2,"Error reading bit precision");
+      Self.FBitOffset$1 = TStream.ReadIntegerExcept(Stream$24,2);
+      Self.FBitPrecision$2 = TStream.ReadIntegerExcept(Stream$24,2);
    }
    ,Destroy:TObject.Destroy
    ,Create$256:THdfBaseDataType.Create$256
@@ -1612,12 +1599,12 @@ var THdfDataTypeCompoundPart = {
       var Temp$2 = 0;
       Self.FName$2 = "";
       do {
-         ByteValue$1 = TStream.ReadIntegerExcept(Stream$25,1,"Error reading character byte");
+         ByteValue$1 = TStream.ReadIntegerExcept(Stream$25,1);
          Self.FName$2 = Self.FName$2+Chr(ByteValue$1);
       } while (!(ByteValue$1==0));
       ByteIndex$3 = 0;
       do {
-         Temp$2 = TStream.ReadIntegerExcept(Stream$25,1,"Error reading value");
+         Temp$2 = TStream.ReadIntegerExcept(Stream$25,1);
          Self.FByteOffset+=Temp$2<<(ByteIndex$3*8);
          ++ByteIndex$3;
       } while (!((1<<(ByteIndex$3*8))>Self.FSize$2));
@@ -1661,8 +1648,8 @@ var THdfDataTypeBitfield = {
       $.FBitOffset$2 = $.FBitPrecision$3 = 0;
    }
    ,LoadFromStream$17:function(Self, Stream$27) {
-      Self.FBitOffset$2 = TStream.ReadIntegerExcept(Stream$27,2,"Error reading bit offset");
-      Self.FBitPrecision$3 = TStream.ReadIntegerExcept(Stream$27,2,"Error reading bit precision");
+      Self.FBitOffset$2 = TStream.ReadIntegerExcept(Stream$27,2);
+      Self.FBitPrecision$3 = TStream.ReadIntegerExcept(Stream$27,2);
    }
    ,Destroy:TObject.Destroy
    ,Create$256:THdfBaseDataType.Create$256
@@ -1743,26 +1730,26 @@ var THdfDataObject = {
       return Self.FDataObjects.length;
    }
    ,LoadFromStream$24:function(Self, Stream$28) {
-      Self.FSignature$2 = TStream.ReadTextExcept(Stream$28,4,"Error reading signature");
+      Self.FSignature$2 = TStream.ReadTextExcept(Stream$28,4);
       if (Self.FSignature$2!="OHDR") {
          throw Exception.Create($New(Exception),("Wrong signature ("+Self.FSignature$2.toString()+")"));
       }
-      Self.FVersion$4 = TStream.ReadIntegerExcept(Stream$28,1,"Error reading version");
+      Self.FVersion$4 = TStream.ReadIntegerExcept(Stream$28,1);
       if (Self.FVersion$4!=2) {
          throw Exception.Create($New(Exception),"Invalid verion");
       }
-      Self.FFlags$7 = TStream.ReadIntegerExcept(Stream$28,1,"Error reading flags");
+      Self.FFlags$7 = TStream.ReadIntegerExcept(Stream$28,1);
       if (Self.FFlags$7&(1<<5)) {
-         Self.FAccessTime = TStream.ReadIntegerExcept(Stream$28,4,"Error reading access time");
-         Self.FModificationTime = TStream.ReadIntegerExcept(Stream$28,4,"Error reading modification time");
-         Self.FChangeTime = TStream.ReadIntegerExcept(Stream$28,4,"Error reading change time");
-         Self.FBirthTime = TStream.ReadIntegerExcept(Stream$28,4,"Error reading birth time");
+         Self.FAccessTime = TStream.ReadIntegerExcept(Stream$28,4);
+         Self.FModificationTime = TStream.ReadIntegerExcept(Stream$28,4);
+         Self.FChangeTime = TStream.ReadIntegerExcept(Stream$28,4);
+         Self.FBirthTime = TStream.ReadIntegerExcept(Stream$28,4);
       }
       if (Self.FFlags$7&(1<<4)) {
-         Self.FMaximumCompact$1 = TStream.ReadIntegerExcept(Stream$28,2,"Error reading maximum number of compact attributes");
-         Self.FMinimumDense$1 = TStream.ReadIntegerExcept(Stream$28,2,"Error reading minimum number of dense attributes");
+         Self.FMaximumCompact$1 = TStream.ReadIntegerExcept(Stream$28,2);
+         Self.FMinimumDense$1 = TStream.ReadIntegerExcept(Stream$28,2);
       }
-      Self.FChunkSize = TStream.ReadIntegerExcept(Stream$28,1<<(Self.FFlags$7&3),"Error reading chunk size");
+      Self.FChunkSize = TStream.ReadIntegerExcept(Stream$28,1<<(Self.FFlags$7&3));
       THdfDataObject.ReadObjectHeaderMessages(Self,Stream$28,Stream$28.FPosition+Self.FChunkSize);
       if (Self.FAttributeInfo.FFractalHeapAddress$1>0&&Self.FAttributeInfo.FFractalHeapAddress$1<Self.FSuperBlock$4.FEndOfFileAddress) {
          Stream$28.FPosition = Self.FAttributeInfo.FFractalHeapAddress$1;
@@ -1780,9 +1767,9 @@ var THdfDataObject = {
       var EndPos = 0;
       var DataObjectMessage = null;
       while (Stream$29.FPosition<EndOfStream-4) {
-         MessageType = TStream.ReadIntegerExcept(Stream$29,1,"Error reading message type");
-         MessageSize = TStream.ReadIntegerExcept(Stream$29,2,"Error reading message size");
-         MessageFlags = TStream.ReadIntegerExcept(Stream$29,1,"Error reading message flags");
+         MessageType = TStream.ReadIntegerExcept(Stream$29,1);
+         MessageSize = TStream.ReadIntegerExcept(Stream$29,2);
+         MessageFlags = TStream.ReadIntegerExcept(Stream$29,1);
          if (MessageFlags&(~5)) {
             throw Exception.Create($New(Exception),"Unsupported OHDR message flag");
          }
@@ -1853,7 +1840,7 @@ var THdfAttribute = {
    ,GetValueAsInteger:function(Self) {
       var Result = 0;
       Self.FStream.FPosition = 0;
-      Result = TStream.ReadIntegerExcept(Self.FStream,4,"Error reading value as integer");
+      Result = TStream.ReadIntegerExcept(Self.FStream,4);
       return Result
    }
    ,GetValueAsString:function(Self) {
@@ -1862,7 +1849,7 @@ var THdfAttribute = {
          Result = "";
          return Result;
       }
-      Result = TStream.ReadTextExcept(Self.FStream,TStream.a$35(Self.FStream),"Error reading value as string");
+      Result = TStream.ReadTextExcept(Self.FStream,TStream.a$35(Self.FStream));
       return Result
    }
    ,SetValueAsInteger:function(Self, Value$9) {

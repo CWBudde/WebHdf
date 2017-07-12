@@ -2,6 +2,8 @@ unit HdfFile;
 
 interface
 
+{-$DEFINE Debug}
+
 uses
   ECMA.TypedArray;
 
@@ -22,11 +24,9 @@ type
   public
     constructor Create(Buffer: JArrayBuffer);
 
-    function ReadTextExcept(const Count: Integer; const ErrorMessage: String): String; overload;
-    function ReadFloatExcept(const Count: Integer; const ErrorMessage: String): Float; overload;
-    function ReadIntegerExcept(const Count: Integer; const ErrorMessage: String): Integer; overload;
-    function ReadBufferExcept(const Count: Integer; const ErrorMessage: String): JUint8Array; overload;
-    function ReadBuffer(const Count: Integer): JUint8Array; overload;
+    function ReadTextExcept(const Count: Integer {$IFDEF Debug}; const ErrorMessage: String{$ENDIF}): String; overload;
+    function ReadIntegerExcept(const Count: Integer {$IFDEF Debug}; const ErrorMessage: String{$ENDIF}): Integer; overload;
+    function ReadBufferExcept(const Count: Integer {$IFDEF Debug}; const ErrorMessage: String{$ENDIF}): JUint8Array; overload;
 
     procedure WriteInteger(const Count: Integer; Value: Integer);
     procedure Clear;
@@ -489,11 +489,13 @@ begin
   FDataView := JDataView.Create(Buffer);
 end;
 
-function TStream.ReadIntegerExcept(const Count: Integer;
-  const ErrorMessage: String): Integer;
+function TStream.ReadIntegerExcept(const Count: Integer{$IFDEF Debug};
+  const ErrorMessage: String{$ENDIF}): Integer;
 begin
   if FPosition + Count > FDataView.byteLength then
-    raise Exception.Create('Position exceeds byte length');
+    raise Exception.Create(
+      {$IFDEF Debug}'Error reading ' + ErrorMessage + '. ' + {$ENDIF}
+      'Position exceeds byte length');
 
   case Count of
     1:
@@ -511,35 +513,19 @@ begin
     8:
       Result := FDataView.getUint32(FPosition, True) or (FDataView.getUint32(FPosition + 4, True) shl 32);
     else
-      raise Exception.Create(ErrorMessage);
+      raise Exception.Create({$IFDEF Debug}'Error reading ' + ErrorMessage{$ELSE}'Unknown bit width'{$ENDIF});
   end;
 
   Inc(FPosition, Count);
 end;
 
-function TStream.ReadFloatExcept(const Count: Integer;
-  const ErrorMessage: String): Float;
+function TStream.ReadTextExcept(const Count: Integer{$IFDEF Debug};
+  const ErrorMessage: String{$ENDIF}): String;
 begin
   if FPosition + Count > FDataView.byteLength then
-    raise Exception.Create('Position exceeds byte length');
-
-  case Count of
-    4:
-      Result := FDataView.getFloat32(FPosition);
-    8:
-      Result := FDataView.getFloat64(FPosition);
-    else
-      raise Exception.Create(ErrorMessage);
-  end;
-
-  Inc(FPosition, Count);
-end;
-
-function TStream.ReadTextExcept(const Count: Integer;
-  const ErrorMessage: String): String;
-begin
-  if FPosition + Count > FDataView.byteLength then
-    raise Exception.Create('Position exceeds byte length');
+    raise Exception.Create(
+      {$IFDEF Debug}'Error reading ' + ErrorMessage + '. ' + {$ENDIF}
+      'Position exceeds byte length');
 
   Result := '';
   for var Index := 0 to Count - 1 do
@@ -552,17 +538,14 @@ begin
   Inc(FPosition, Count);
 end;
 
-function TStream.ReadBufferExcept(const Count: Integer; const ErrorMessage: String): JUint8Array;
+function TStream.ReadBufferExcept(const Count: Integer {$IFDEF Debug};
+  const ErrorMessage: String{$ENDIF}): JUint8Array;
 begin
   if FPosition + Count > FDataView.byteLength then
-    raise Exception.Create('Position exceeds byte length');
+    raise Exception.Create(
+      {$IFDEF Debug}'Error reading ' + ErrorMessage + '. ' + {$ENDIF}
+      'Position exceeds byte length');
 
-  Result := JUint8Array.Create(FDataView.buffer.slice(FPosition, FPosition + Count));
-  Inc(FPosition, Count);
-end;
-
-function TStream.ReadBuffer(const Count: Integer): JUint8Array;
-begin
   Result := JUint8Array.Create(FDataView.buffer.slice(FPosition, FPosition + Count));
   Inc(FPosition, Count);
 end;
@@ -605,41 +588,41 @@ end;
 
 procedure THdfSuperBlock.LoadFromStream(Stream: TStream);
 begin
-  var Identifier := Stream.ReadIntegerExcept(1, 'Error reading signature');
+  var Identifier := Stream.ReadIntegerExcept(1{$IFDEF Debug}, 'signature'{$ENDIF});
   if Identifier <> 137 then
     raise Exception.Create('The file is not a valid HDF');
 
-  FFormatSignature := Stream.ReadTextExcept(3, 'Error reading signature');
+  FFormatSignature := Stream.ReadTextExcept(3{$IFDEF Debug}, 'signature'{$ENDIF});
   if FFormatSignature <> 'HDF' then
     raise Exception.Create('The file is not a valid HDF');
 
-  var FormatSignatureVersion := Stream.ReadIntegerExcept(4, 'Error reading signature');
+  var FormatSignatureVersion := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'signature'{$ENDIF});
   if FormatSignatureVersion <> 169478669 then // was 218765834
     raise Exception.Create('The file is not a valid HDF');
 
   // read version
-  FVersion := Stream.ReadIntegerExcept(1, 'Error reading version');
+  FVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'version'{$ENDIF});
   if not (FVersion in [2, 3]) then
     raise Exception.Create('Unsupported version');
 
   // read offset & length size
-  FOffsetSize := Stream.ReadIntegerExcept(1, 'Error reading offset size');
-  FLengthsSize := Stream.ReadIntegerExcept(1, 'Error reading lengths size');
+  FOffsetSize := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'offset size'{$ENDIF});
+  FLengthsSize := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'lengths size'{$ENDIF});
 
   // read consistency flag
-  FConsistencyFlag := Stream.ReadIntegerExcept(1, 'Error reading consistency flag');
+  FConsistencyFlag := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'consistency flag'{$ENDIF});
 
   // read base address
-  FBaseAddress := Stream.ReadIntegerExcept(FOffsetSize, 'Error reading base address');
+  FBaseAddress := Stream.ReadIntegerExcept(FOffsetSize {$IFDEF DEBUG}, 'base address'{$ENDIF});
 
   // read superblock extension address
-  FSuperBlockExtensionAddress := Stream.ReadIntegerExcept(FOffsetSize, 'Error reading superblock extension address');
+  FSuperBlockExtensionAddress := Stream.ReadIntegerExcept(FOffsetSize{$IFDEF DEBUG}, 'superblock extension address'{$ENDIF});
 
   // read end of file address
-  FEndOfFileAddress := Stream.ReadIntegerExcept(FOffsetSize, 'Error reading end of file address');
+  FEndOfFileAddress := Stream.ReadIntegerExcept(FOffsetSize{$IFDEF DEBUG}, 'end of file address'{$ENDIF});
 
   // read group object header address
-  FRootGroupObjectHeaderAddress := Stream.ReadIntegerExcept(FOffsetSize, 'Error reading group object header address');
+  FRootGroupObjectHeaderAddress := Stream.ReadIntegerExcept(FOffsetSize{$IFDEF DEBUG}, 'group object header address'{$ENDIF});
 
   if FBaseAddress <> 0 then
     raise Exception.Create('The base address should be zero');
@@ -648,7 +631,7 @@ begin
     raise Exception.Create('Size mismatch');
 
   // read checksum
-  FChecksum := Stream.ReadIntegerExcept(4, 'Error reading checksum');
+  FChecksum := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'checksum'{$ENDIF});
 
   // read checksum
   if Stream.Seek(FRootGroupObjectHeaderAddress) <> FRootGroupObjectHeaderAddress then
@@ -672,7 +655,7 @@ end;
 procedure THdfDataObjectMessage.LoadFromStream(Stream: TStream);
 begin
   // read version
-  FVersion := Stream.ReadIntegerExcept(1, 'Error reading version');
+  FVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'version'{$ENDIF});
 end;
 
 procedure THdfDataObjectMessage.SaveToStream(Stream: TStream);
@@ -693,10 +676,10 @@ begin
     raise Exception.Create('Unsupported version of dataspace message');
 
   // read dimensionality
-  FDimensionality := Stream.ReadIntegerExcept(1, 'Error reading dimensionality');
+  FDimensionality := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'dimensionality'{$ENDIF});
 
   // read flags
-  FFlags := Stream.ReadIntegerExcept(1, 'Error reading flags');
+  FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
 
   // eventually skip reserved
   if FVersion = 1 then
@@ -707,13 +690,13 @@ begin
   end;
 
   // read type
-  FType := Stream.ReadIntegerExcept(1, 'Error reading type');
+  FType := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'type'{$ENDIF});
 
   // read dimension size
   //SetLength(FDimensionSize, FDimensionality);
   for Index := 0 to FDimensionality - 1 do
   begin
-    var Size := Stream.ReadIntegerExcept(Superblock.LengthsSize, 'Error reading dimension size');
+    var Size := Stream.ReadIntegerExcept(Superblock.LengthsSize{$IFDEF DEBUG}, 'dimension size'{$ENDIF});
     FDimensionSize.Add(Size);
   end;
 
@@ -722,7 +705,7 @@ begin
   begin
     for Index := 0 to FDimensionality - 1 do
     begin
-      var MaxSize := Stream.ReadIntegerExcept(Superblock.LengthsSize, 'Error reading dimension size');
+      var MaxSize := Stream.ReadIntegerExcept(Superblock.LengthsSize{$IFDEF DEBUG}, 'dimension size'{$ENDIF});
       FDimensionMaxSize.Add(MaxSize);
     end
   end;
@@ -761,8 +744,8 @@ procedure THdfDataTypeFixedPoint.LoadFromStream(Stream: TStream);
 begin
   inherited LoadFromStream(Stream);
 
-  FBitOffset := Stream.ReadIntegerExcept(2, 'Error reading bit offset');
-  FBitPrecision := Stream.ReadIntegerExcept(2, 'Error reading bit precision');
+  FBitOffset := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'bit offset'{$ENDIF});
+  FBitPrecision := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'bit precision'{$ENDIF});
 end;
 
 
@@ -770,14 +753,14 @@ end;
 
 procedure THdfDataTypeFloatingPoint.LoadFromStream(Stream: TStream);
 begin
-  FBitOffset := Stream.ReadIntegerExcept(2, 'Error reading bit offset');
-  FBitPrecision := Stream.ReadIntegerExcept(2, 'Error reading bit precision');
+  FBitOffset := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'bit offset'{$ENDIF});
+  FBitPrecision := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'bit precision'{$ENDIF});
 
-  FExponentLocation := Stream.ReadIntegerExcept(1, 'Error reading exponent location');
-  FExponentSize := Stream.ReadIntegerExcept(1, 'Error reading exponent size');
-  FMantissaLocation := Stream.ReadIntegerExcept(1, 'Error reading mantissa location');
-  FMantissaSize := Stream.ReadIntegerExcept(1, 'Error reading mantissa size');
-  FExponentBias := Stream.ReadIntegerExcept(4, 'Error reading exponent bias');
+  FExponentLocation := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'exponent location'{$ENDIF});
+  FExponentSize := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'exponent size'{$ENDIF});
+  FMantissaLocation := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'mantissa location'{$ENDIF});
+  FMantissaSize := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'mantissa size'{$ENDIF});
+  FExponentBias := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'exponent bias'{$ENDIF});
 
   if (FBitOffset <> 0) then
     raise Exception.Create('Unsupported bit offset');
@@ -814,7 +797,7 @@ end;
 
 procedure THdfDataTypeTime.LoadFromStream(Stream: TStream);
 begin
-  FBitPrecision := Stream.ReadIntegerExcept(2, 'Error reading bit precision');
+  FBitPrecision := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'bit precision'{$ENDIF});
 end;
 
 
@@ -822,8 +805,8 @@ end;
 
 procedure THdfDataTypeBitfield.LoadFromStream(Stream: TStream);
 begin
-  FBitOffset := Stream.ReadIntegerExcept(2, 'Error reading bit offset');
-  FBitPrecision := Stream.ReadIntegerExcept(2, 'Error reading bit precision');
+  FBitOffset := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'bit offset'{$ENDIF});
+  FBitPrecision := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'bit precision'{$ENDIF});
 end;
 
 
@@ -843,13 +826,13 @@ var
 begin
   FName := '';
   repeat
-    ByteValue := Stream.ReadIntegerExcept(1, 'Error reading character byte');
+    ByteValue := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'character byte'{$ENDIF});
     FName := FName + Chr(ByteValue);
   until ByteValue = 0;
 
   ByteIndex := 0;
   repeat
-    Temp := Stream.ReadIntegerExcept(1, 'Error reading value');
+    Temp := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'value'{$ENDIF});
     FByteOffset := FByteOffset + Temp shl (8 * ByteIndex);
     Inc(ByteIndex);
   until 1 shl (8 * ByteIndex) > FSize;
@@ -915,11 +898,11 @@ begin
   if not (FVersion in [1, 3]) then
     raise Exception.Create('Unsupported version of data type message');
 
-  FClassBitField[0] := Stream.ReadIntegerExcept(1, 'Error reading class bit field');
-  FClassBitField[1] := Stream.ReadIntegerExcept(1, 'Error reading class bit field');
-  FClassBitField[2] := Stream.ReadIntegerExcept(1, 'Error reading class bit field');
+  FClassBitField[0] := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'class bit field'{$ENDIF});
+  FClassBitField[1] := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'class bit field'{$ENDIF});
+  FClassBitField[2] := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'class bit field'{$ENDIF});
 
-  FSize := Stream.ReadIntegerExcept(4, 'Error reading size');
+  FSize := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'size'{$ENDIF});
 
   case FDataClass of
     0:
@@ -964,11 +947,11 @@ begin
     raise Exception.Create('Unsupported version of data fill message');
 
   // read flags
-  FFlags := Stream.ReadIntegerExcept(1, 'Error reading flags');
+  FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
 
   if (FFlags and (1 shl 5)) <> 0 then
   begin
-    FSize := Stream.ReadIntegerExcept(4, 'Error reading size');
+    FSize := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'size'{$ENDIF});
     Stream.Seek(FSize, True);
   end;
 end;
@@ -988,39 +971,39 @@ begin
   if FVersion <> 3 then
     raise Exception.Create('Unsupported version of data layout message');
 
-  FLayoutClass := Stream.ReadIntegerExcept(1, 'Error reading layout class');
+  FLayoutClass := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'layout class'{$ENDIF});
   case FLayoutClass of
     0: // compact storage
       begin
         // read data size
-        FDataSize := Stream.ReadIntegerExcept(2, 'Error reading data size');
+        FDataSize := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'data size'{$ENDIF});
 
         // read raw data
-        DataObject.Data := Stream.ReadBufferExcept(FDataSize, 'Error reading from buffer');
+        DataObject.Data := Stream.ReadBufferExcept(FDataSize{$IFDEF DEBUG}, 'from buffer'{$ENDIF});
       end;
     1: // continous storage
       begin
         // compact storage
-        FDataAddress := Stream.ReadIntegerExcept(Superblock.OffsetSize, 'Error reading data address');
-        FDataSize := Stream.ReadIntegerExcept(Superblock.LengthsSize, 'Error reading data lengths');
+        FDataAddress := Stream.ReadIntegerExcept(Superblock.OffsetSize{$IFDEF DEBUG}, 'data address'{$ENDIF});
+        FDataSize := Stream.ReadIntegerExcept(Superblock.LengthsSize{$IFDEF DEBUG}, 'data lengths'{$ENDIF});
 
         if FDataAddress > 0 then
         begin
           StreamPos := Stream.Position;
           Stream.Position := FDataAddress;
 
-          DataObject.Data := Stream.ReadBufferExcept(FDataSize, 'Error reading from buffer');
+          DataObject.Data := Stream.ReadBufferExcept(FDataSize{$IFDEF DEBUG}, 'from buffer'{$ENDIF});
 
           Stream.Position := StreamPos;
         end;
       end;
     2:
       begin
-        FDimensionality := Stream.ReadIntegerExcept(1, 'Error reading dimensionality');
-        FDataAddress := Stream.ReadIntegerExcept(Superblock.OffsetSize, 'Error reading data address');
+        FDimensionality := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'dimensionality'{$ENDIF});
+        FDataAddress := Stream.ReadIntegerExcept(Superblock.OffsetSize{$IFDEF DEBUG}, 'data address'{$ENDIF});
         for Index := 0 to FDimensionality - 1 do
         begin
-          var DataLayoutChunk := Stream.ReadIntegerExcept(4, 'Error reading data layout chunk');
+          var DataLayoutChunk := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'data layout chunk'{$ENDIF});
           FDataObject.FDataLayoutChunk.Add(DataLayoutChunk);
         end;
 
@@ -1049,16 +1032,16 @@ begin
     raise EHdfInvalidFormat.Create('Error reading dimensions');
 
   // read signature
-  var Signature := Stream.ReadTextExcept(4, 'Error reading signature');
+  var Signature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if Signature <> 'TREE' then
     raise Exception.Create(Format('Wrong signature (%s)', [string(Signature)]));
 
-  var NodeType := Stream.ReadIntegerExcept(1, 'Error reading node type');
-  var NodeLevel := Stream.ReadIntegerExcept(1, 'Error reading node level');
+  var NodeType := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'node type'{$ENDIF});
+  var NodeLevel := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'node level'{$ENDIF});
 
-  var EntriesUsed := Stream.ReadIntegerExcept(2, 'Error reading entries used');
-  var AddressLeftSibling := Stream.ReadIntegerExcept(Superblock.OffsetSize, 'Error reading left sibling address');
-  var AddressRightSibling := Stream.ReadIntegerExcept(Superblock.OffsetSize, 'Error reading right sibling address');
+  var EntriesUsed := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'entries used'{$ENDIF});
+  var AddressLeftSibling := Stream.ReadIntegerExcept(Superblock.OffsetSize{$IFDEF DEBUG}, 'left sibling address'{$ENDIF});
+  var AddressRightSibling := Stream.ReadIntegerExcept(Superblock.OffsetSize{$IFDEF DEBUG}, 'right sibling address'{$ENDIF});
 
   var Elements := 1;
   for var DimensionIndex := 0 to FDataObject.DataSpace.Dimensionality - 1 do
@@ -1070,33 +1053,33 @@ begin
   for var ElementIndex := 0 to 2 * EntriesUsed - 1 do
   begin
     if NodeType = 0 then
-      Key := Stream.ReadIntegerExcept(Superblock.LengthsSize, 'Error reading keys')
+      Key := Stream.ReadIntegerExcept(Superblock.LengthsSize{$IFDEF DEBUG}, 'keys'{$ENDIF})
     else
     begin
-      var ChunkSize := Stream.ReadIntegerExcept(4, 'Error reading chunk size');
-      var FilterMask := Stream.ReadIntegerExcept(4, 'Error reading filter mask');
+      var ChunkSize := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'chunk size'{$ENDIF});
+      var FilterMask := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'filter mask'{$ENDIF});
       if FilterMask <> 0 then
         raise Exception.Create('All filters must be enabled');
 
       var Start: array of Integer;
       for var DimensionIndex := 0 to DataObject.DataSpace.Dimensionality - 1 do
       begin
-        var StartPos := Stream.ReadIntegerExcept(8, 'Error reading start');
+        var StartPos := Stream.ReadIntegerExcept(8{$IFDEF DEBUG}, 'start'{$ENDIF});
         Start.Add(StartPos);
       end;
 
-      var BreakCondition := Stream.ReadIntegerExcept(8, 'Error reading break condition');
+      var BreakCondition := Stream.ReadIntegerExcept(8{$IFDEF DEBUG}, 'break condition'{$ENDIF});
       if BreakCondition <> 0 then
         Break;
 
-      var ChildPointer := Stream.ReadIntegerExcept(Superblock.OffsetSize, 'Error reading child pointer');
+      var ChildPointer := Stream.ReadIntegerExcept(Superblock.OffsetSize{$IFDEF DEBUG}, 'child pointer'{$ENDIF});
 
       // read data
       var StreamPos := Stream.Position;
       Stream.Position := ChildPointer;
 
       // read data from stream
-      var ByteData := Stream.ReadBufferExcept(ChunkSize, 'Error reading buffer');
+      var ByteData := Stream.ReadBufferExcept(ChunkSize{$IFDEF DEBUG}, 'buffer'{$ENDIF});
       var Inflate := JZlibInflate.Create(ByteData);
       var Input := JUint8Array(Inflate.decompress);
       Assert(Input.byteLength = Elements * ElementSize);
@@ -1162,7 +1145,7 @@ begin
     DataObject.Data.set(Output, OldData.byteLength);
   end;
 
-  var CheckSum := Stream.ReadIntegerExcept(4, 'Error reading checksum');
+  var CheckSum := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'checksum'{$ENDIF});
 end;
 
 
@@ -1177,19 +1160,19 @@ begin
     raise Exception.Create('Unsupported version of link info message');
 
   // read flags
-  FFlags := Stream.ReadIntegerExcept(1, 'Error reading flags');
+  FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
 
   if (FFlags and 1) <> 0 then
-    FMaximumCreationIndex := Stream.ReadIntegerExcept(8, 'Error reading maximum creation index');
+    FMaximumCreationIndex := Stream.ReadIntegerExcept(8{$IFDEF DEBUG}, 'maximum creation index'{$ENDIF});
 
-  FFractalHeapAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize,
-    'Error reading maximum creation index');
-  FAddressBTreeIndex := Stream.ReadIntegerExcept(SuperBlock.OffsetSize,
-    'Error reading maximum creation index');
+  FFractalHeapAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG},
+    'maximum creation index'{$ENDIF});
+  FAddressBTreeIndex := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG},
+    'maximum creation index'{$ENDIF});
 
   if (FFlags and 2) <> 0 then
-    FAddressBTreeOrder := Stream.ReadIntegerExcept(SuperBlock.OffsetSize,
-      'Error reading maximum creation index');
+    FAddressBTreeOrder := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG},
+      'maximum creation index'{$ENDIF});
 end;
 
 
@@ -1204,18 +1187,18 @@ begin
     raise Exception.Create('Unsupported version of group info message');
 
   // read flags
-  FFlags := Stream.ReadIntegerExcept(1, 'Error reading flags');
+  FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
 
   if (FFlags and 1) <> 0 then
   begin
-    FMaximumCompact := Stream.ReadIntegerExcept(2, 'Error reading maximum compact value');
-    FMinimumDense := Stream.ReadIntegerExcept(2, 'Error reading maximum compact value');
+    FMaximumCompact := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'maximum compact value'{$ENDIF});
+    FMinimumDense := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'maximum compact value'{$ENDIF});
   end;
 
   if (FFlags and 2) <> 0 then
   begin
-    FEstimatedNumberOfEntries := Stream.ReadIntegerExcept(2, 'Error reading estimated number of entries');
-    FEstimatedLinkNameLength := Stream.ReadIntegerExcept(2, 'Error reading estimated link name length of entries');
+    FEstimatedNumberOfEntries := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'estimated number of entries'{$ENDIF});
+    FEstimatedLinkNameLength := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'estimated link name length of entries'{$ENDIF});
   end;
 end;
 
@@ -1236,19 +1219,19 @@ begin
   if FVersion <> 2 then
     raise Exception.Create('Unsupported version of the filter pipeline message');
 
-  FFilters := Stream.ReadIntegerExcept(1, 'Error reading filters');
+  FFilters := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'filters'{$ENDIF});
   if FFilters > 32 then
     raise Exception.Create('filter pipeline message has too many filters');
 
   for Index := 0 to FFilters - 1 do
   begin
-    FilterIdentificationValue := Stream.ReadIntegerExcept(2, 'Error reading filter identification value');
+    FilterIdentificationValue := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'filter identification value'{$ENDIF});
     if not FilterIdentificationValue in [1, 2] then
       raise Exception.Create('Unsupported filter');
-    Flags := Stream.ReadIntegerExcept(2, 'Error reading flags');
-    NumberClientDataValues := Stream.ReadIntegerExcept(2, 'Error reading number client data values');
+    Flags := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'flags'{$ENDIF});
+    NumberClientDataValues := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'number client data values'{$ENDIF});
     for ValueIndex := 0 to NumberClientDataValues - 1 do
-      ClientData := Stream.ReadIntegerExcept(4, 'Error reading client data');
+      ClientData := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'client data'{$ENDIF});
   end;
 end;
 
@@ -1269,7 +1252,7 @@ begin
     Exit;
   end;
 
-  Result := FStream.ReadTextExcept(FStream.Size, 'Error reading value as string');
+  Result := FStream.ReadTextExcept(FStream.Size{$IFDEF Debug}, 'value as string'{$ENDIF});
 end;
 
 procedure THdfAttribute.SetValueAsInteger(const Value: Integer);
@@ -1281,7 +1264,7 @@ end;
 function THdfAttribute.GetValueAsInteger: Integer;
 begin
   FStream.Position := 0;
-  Result := FStream.ReadIntegerExcept(4, 'Error reading value as integer');
+  Result := FStream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'value as integer'{$ENDIF});
 end;
 
 procedure THdfAttribute.SetValueAsString(const Value: String);
@@ -1313,7 +1296,7 @@ begin
     3:
       begin
         SetLength(Name, FDatatypeMessage.Size);
-        Name := Stream.ReadTextExcept(FDatatypeMessage.Size, 'Error reading string');
+        Name := Stream.ReadTextExcept(FDatatypeMessage.Size{$IFDEF Debug}, 'string'{$ENDIF});
         Attribute.ValueAsString := Name;
       end;
     6:
@@ -1323,17 +1306,17 @@ begin
       end;
     7:
       begin
-        Value := Stream.ReadIntegerExcept(4, 'Error reading value');
+        Value := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'value'{$ENDIF});
         Attribute.ValueAsInteger := Value;
         // TODO
       end;
     9:
       begin
-        Dimension := Stream.ReadIntegerExcept(4, 'Error reading dimension');
-        EndAddress := Stream.ReadIntegerExcept(4, 'Error reading end address');
+        Dimension := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'dimension'{$ENDIF});
+        EndAddress := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'end address'{$ENDIF});
 
-        Value := Stream.ReadIntegerExcept(4, 'Error reading value');
-        Value := Stream.ReadIntegerExcept(4, 'Error reading value');
+        Value := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'value'{$ENDIF});
+        Value := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'value'{$ENDIF});
         // TODO
       end;
     else
@@ -1367,14 +1350,14 @@ begin
     raise Exception.Create('Unsupported version of group info message');
 
   // read flags
-  FFlags := Stream.ReadIntegerExcept(1, 'Error reading flags');
+  FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
 
-  FNameSize := Stream.ReadIntegerExcept(2, 'Error reading name size');
-  FDatatypeSize := Stream.ReadIntegerExcept(2, 'Error reading datatype size');
-  FDataspaceSize := Stream.ReadIntegerExcept(2, 'Error reading dataspace size');
-  FEncoding := Stream.ReadIntegerExcept(1, 'Error reading encoding');
+  FNameSize := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'name size'{$ENDIF});
+  FDatatypeSize := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'datatype size'{$ENDIF});
+  FDataspaceSize := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'dataspace size'{$ENDIF});
+  FEncoding := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'encoding'{$ENDIF});
 
-  FName := Stream.ReadTextExcept(FNameSize, 'Error reading name');
+  FName := Stream.ReadTextExcept(FNameSize{$IFDEF Debug}, 'name'{$ENDIF});
 
   FDatatypeMessage := THdfMessageDataType.Create(Superblock, DataObject);
   FDatatypeMessage.LoadFromStream(Stream);
@@ -1398,14 +1381,14 @@ var
   StreamPos: Integer;
   Signature: THdfSignature;
 begin
-  FOffset := Stream.ReadIntegerExcept(Superblock.OffsetSize, 'Error reading offset');
-  FLength := Stream.ReadIntegerExcept(Superblock.LengthsSize, 'Error reading length');
+  FOffset := Stream.ReadIntegerExcept(Superblock.OffsetSize{$IFDEF DEBUG}, 'offset'{$ENDIF});
+  FLength := Stream.ReadIntegerExcept(Superblock.LengthsSize{$IFDEF DEBUG}, 'length'{$ENDIF});
 
   StreamPos := Stream.Position;
   Stream.Position := FOffset;
 
   // read signature
-  Signature := Stream.ReadTextExcept(4, 'Error reading signature');
+  Signature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if Signature <> 'OCHK' then
     raise Exception.Create(Format('Wrong signature (%s)', [string(Signature)]));
 
@@ -1426,16 +1409,16 @@ begin
     raise Exception.Create('Unsupported version of attribute info message');
 
   // read flags
-  FFlags := Stream.ReadIntegerExcept(1, 'Error reading flags');
+  FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
 
   if (FFlags and 1) <> 0 then
-    FMaximumCreationIndex := Stream.ReadIntegerExcept(2, 'Error reading maximum creation index');
+    FMaximumCreationIndex := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'maximum creation index'{$ENDIF});
 
-  FFractalHeapAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading fractal heap address');
-  FAttributeNameBTreeAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading attribute name B-tree address');
+  FFractalHeapAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'fractal heap address'{$ENDIF});
+  FAttributeNameBTreeAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'attribute name B-tree address'{$ENDIF});
 
   if (FFlags and 2) <> 0 then
-    FAttributeOrderBTreeAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading attribute order B-tree address');
+    FAttributeOrderBTreeAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'attribute order B-tree address'{$ENDIF});
 end;
 
 
@@ -1452,21 +1435,21 @@ end;
 procedure THdfCustomBlock.LoadFromStream(Stream: TStream);
 begin
   // read signature
-  FSignature := Stream.ReadTextExcept(4, 'Error reading signature');
+  FSignature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if FSignature <> GetSignature then
     raise Exception.Create(Format('Wrong signature (%s)', [string(FSignature)]));
 
   // read version
-  FVersion := Stream.ReadIntegerExcept(1, 'Error reading version');
+  FVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'version'{$ENDIF});
   if FVersion <> 0 then
     raise Exception.Create('Unsupported version of link info message');
 
   // read heap header address
-  FHeapHeaderAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading heap header address');
+  FHeapHeaderAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'heap header address'{$ENDIF});
 
   // read block offset
   FBlockOffset := 0;
-  FBlockOffset := Stream.ReadIntegerExcept((FFractalHeap.MaximumHeapSize + 7) div 8, 'Error reading block offset');
+  FBlockOffset := Stream.ReadIntegerExcept((FFractalHeap.MaximumHeapSize + 7) div 8{$IFDEF DEBUG}, 'block offset'{$ENDIF});
 end;
 
 procedure THdfCustomBlock.SaveToStream(Stream: TStream);
@@ -1496,7 +1479,7 @@ begin
   inherited LoadFromStream(Stream);
 
   if (FFractalHeap.Flags and 2) <> 0 then
-    FChecksum := Stream.ReadIntegerExcept(4, 'Error reading checksum');
+    FChecksum := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'checksum'{$ENDIF});
 
   OffsetSize := Ceil(log2(FFractalHeap.MaximumHeapSize) / 8);
   if (FFractalHeap.MaximumDirectBlockSize < FFractalHeap.MaximumSize) then
@@ -1505,33 +1488,33 @@ begin
     LengthSize := Ceil(log2(FFractalHeap.MaximumSize) / 8);
 
   repeat
-    TypeAndVersion := Stream.ReadIntegerExcept(1, 'Error reading type and version');
+    TypeAndVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'type and version'{$ENDIF});
 
     OffsetX := 0;
     LengthX := 0;
-    OffsetX := Stream.ReadIntegerExcept(OffsetSize, 'Error reading offset');
-    LengthX := Stream.ReadIntegerExcept(LengthSize, 'Error reading length');
+    OffsetX := Stream.ReadIntegerExcept(OffsetSize{$IFDEF DEBUG}, 'offset'{$ENDIF});
+    LengthX := Stream.ReadIntegerExcept(LengthSize{$IFDEF DEBUG}, 'length'{$ENDIF});
 
     if (TypeAndVersion = 3) then
     begin
       var Temp := 0;
-      Temp := Stream.ReadIntegerExcept(5, 'Error reading magic');
+      Temp := Stream.ReadIntegerExcept(5{$IFDEF DEBUG}, 'magic'{$ENDIF});
       if Temp <> $40008 then
         raise Exception.Create('Unsupported values');
 
-      Name := Stream.ReadTextExcept(LengthX, 'Error reading name');
+      Name := Stream.ReadTextExcept(LengthX{$IFDEF Debug}, 'name'{$ENDIF});
 
       Temp := 0;
-      Temp := Stream.ReadIntegerExcept(4, 'Error reading magic');
+      Temp := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'magic'{$ENDIF});
       if (Temp <> $13) then
         raise Exception.Create('Unsupported values');
 
-      LengthX := Stream.ReadIntegerExcept(2, 'Error reading length');
-      var ValueType := Stream.ReadIntegerExcept(4, 'Error reading unknown value');
-      var TypeExtend := Stream.ReadIntegerExcept(2, 'Error reading unknown value');
+      LengthX := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'length'{$ENDIF});
+      var ValueType := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'unknown value'{$ENDIF});
+      var TypeExtend := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'unknown value'{$ENDIF});
       if (ValueType = $20000) then
         if (TypeExtend = 0) then
-          Value := Stream.ReadTextExcept(LengthX, 'Error reading value')
+          Value := Stream.ReadTextExcept(LengthX{$IFDEF Debug}, 'value'{$ENDIF})
         else if (TypeExtend = 200) then
           Value := '';
 
@@ -1544,16 +1527,16 @@ begin
     if (TypeAndVersion = 1) then
     begin
       var Temp := 0;
-      Temp := Stream.ReadIntegerExcept(6, 'Error reading magic');
+      Temp := Stream.ReadIntegerExcept(6{$IFDEF DEBUG}, 'magic'{$ENDIF});
       if Temp <> 0 then
         raise Exception.Create('FHDB type 1 unsupported values');
 
       // read name  
-      LengthX := Stream.ReadIntegerExcept(1, 'Error reading length');
-      Name := Stream.ReadTextExcept(LengthX, 'Error reading name');
+      LengthX := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'length'{$ENDIF});
+      Name := Stream.ReadTextExcept(LengthX{$IFDEF Debug}, 'name'{$ENDIF});
 
       // read heap header address
-      HeapHeaderAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading heap header address');
+      HeapHeaderAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'heap header address'{$ENDIF});
 
       StreamPos := Stream.Position;
       
@@ -1619,11 +1602,11 @@ begin
   while (k > 0) do
   begin
     ChildBlockAddress := 0;
-    ChildBlockAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading child direct block address');
+    ChildBlockAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'child direct block address'{$ENDIF});
     if (FFractalHeap.EncodedLength > 0) then
     begin
-      SizeOfFilteredDirectBlock := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading filtered direct block');
-      FilterMaskForDirectBlock := Stream.ReadIntegerExcept(4, 'Error reading filter mask');
+      SizeOfFilteredDirectBlock := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'filtered direct block'{$ENDIF});
+      FilterMaskForDirectBlock := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'filter mask'{$ENDIF});
     end;
 
     if (ChildBlockAddress > 0) and (ChildBlockAddress < SuperBlock.EndOfFileAddress) then
@@ -1642,7 +1625,7 @@ begin
   while (n > 0) do
   begin
     ChildBlockAddress := 0;
-    ChildBlockAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading child direct block address');
+    ChildBlockAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'child direct block address'{$ENDIF});
 
     if (ChildBlockAddress > 0) and (ChildBlockAddress < SuperBlock.EndOfFileAddress) then
     begin
@@ -1672,43 +1655,43 @@ var
   Block: THdfCustomBlock;
 begin
   // read signature
-  FSignature := Stream.ReadTextExcept(4, 'Error reading signature');
+  FSignature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if FSignature <> 'FRHP' then
     raise Exception.Create(Format('Wrong signature (%s)', [string(FSignature)]));
 
   // read version
-  FVersion := Stream.ReadIntegerExcept(1, 'Error reading version');
+  FVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'version'{$ENDIF});
   if FVersion <> 0 then
     raise Exception.Create('Unsupported version of link info message');
 
-  FHeapIdLength := Stream.ReadIntegerExcept(2, 'Error reading heap ID length');
-  FEncodedLength := Stream.ReadIntegerExcept(2, 'Error reading I/O filters'' encoded length');
-  FFlags := Stream.ReadIntegerExcept(1, 'Error reading flags');
+  FHeapIdLength := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'heap ID length'{$ENDIF});
+  FEncodedLength := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'I/O filters'' encoded length'{$ENDIF});
+  FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
 
-  FMaximumSize := Stream.ReadIntegerExcept(4, 'Error reading maximum size');
-  FNextHugeID := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading next huge ID');
-  FBtreeAddresses := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading Btree Addresses');
-  FAmountFreeSpace := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading amount of free space');
-  FAddressManagedBlock := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading offset size');
-  FAmountManagedSpace := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading amount of managed space');
-  FAmountAllocatedManagedSpace := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading amount of allocated managed space');
-  FOffsetDirectBlockAllocation := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading offset of direct block allocation');
-  FNumberOfManagedObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading number of managed object');
-  FSizeOfHugeObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading size of huge objects');
-  FNumberOfHugeObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading number of huge objects');
-  FSizeOfTinyObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading size of tiny objects');
-  FNumberOfTinyObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading number of tiny objects');
-  FTableWidth := Stream.ReadIntegerExcept(2, 'Error reading table width');
-  FStartingBlockSize := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading starting block size');
-  FMaximumDirectBlockSize := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading maximum direct block size');
-  FMaximumHeapSize := Stream.ReadIntegerExcept(2, 'Error reading maximum heap size');
-  FStartingNumber := Stream.ReadIntegerExcept(2, 'Error reading starting number');
-  FAddressOfRootBlock := Stream.ReadIntegerExcept(SuperBlock.OffsetSize, 'Error reading address of root block');
-  FCurrentNumberOfRows := Stream.ReadIntegerExcept(2, 'Error reading current number of rows');
+  FMaximumSize := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'maximum size'{$ENDIF});
+  FNextHugeID := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'next huge ID'{$ENDIF});
+  FBtreeAddresses := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'Btree Addresses'{$ENDIF});
+  FAmountFreeSpace := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'amount of free space'{$ENDIF});
+  FAddressManagedBlock := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'offset size'{$ENDIF});
+  FAmountManagedSpace := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'amount of managed space'{$ENDIF});
+  FAmountAllocatedManagedSpace := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'amount of allocated managed space'{$ENDIF});
+  FOffsetDirectBlockAllocation := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'offset of direct block allocation'{$ENDIF});
+  FNumberOfManagedObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'number of managed object'{$ENDIF});
+  FSizeOfHugeObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'size of huge objects'{$ENDIF});
+  FNumberOfHugeObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'number of huge objects'{$ENDIF});
+  FSizeOfTinyObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'size of tiny objects'{$ENDIF});
+  FNumberOfTinyObjects := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'number of tiny objects'{$ENDIF});
+  FTableWidth := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'table width'{$ENDIF});
+  FStartingBlockSize := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'starting block size'{$ENDIF});
+  FMaximumDirectBlockSize := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'maximum direct block size'{$ENDIF});
+  FMaximumHeapSize := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'maximum heap size'{$ENDIF});
+  FStartingNumber := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'starting number'{$ENDIF});
+  FAddressOfRootBlock := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'address of root block'{$ENDIF});
+  FCurrentNumberOfRows := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'current number of rows'{$ENDIF});
   if FEncodedLength > 0 then
   begin
-    FSizeOfFilteredRootDirectBlock := Stream.ReadIntegerExcept(SuperBlock.LengthsSize, 'Error reading the size of filtered root direct blocks');
-    FIOFilterMask := Stream.ReadIntegerExcept(4, 'Error reading I/O filter mask');
+    FSizeOfFilteredRootDirectBlock := Stream.ReadIntegerExcept(SuperBlock.LengthsSize{$IFDEF DEBUG}, 'the size of filtered root direct blocks'{$ENDIF});
+    FIOFilterMask := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'I/O filter mask'{$ENDIF});
   end;
 
   if (FNumberOfHugeObjects > 0) then
@@ -1830,34 +1813,34 @@ end;
 
 procedure THdfDataObject.LoadFromStream(Stream: TStream);
 begin
-  FSignature := Stream.ReadTextExcept(4, 'Error reading signature');
+  FSignature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if FSignature <> 'OHDR' then
     raise Exception.Create(Format('Wrong signature (%s)', [string(FSignature)]));
 
   // read version
-  FVersion := Stream.ReadIntegerExcept(1, 'Error reading version');
+  FVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'version'{$ENDIF});
   if FVersion <> 2 then
     raise Exception.Create('Invalid verion');
 
-  FFlags := Stream.ReadIntegerExcept(1, 'Error reading flags');
+  FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
 
   // eventually read time stamps
   if (FFlags and (1 shl 5)) <> 0 then
   begin
-    FAccessTime := Stream.ReadIntegerExcept(4, 'Error reading access time');
-    FModificationTime := Stream.ReadIntegerExcept(4, 'Error reading modification time');
-    FChangeTime := Stream.ReadIntegerExcept(4, 'Error reading change time');
-    FBirthTime := Stream.ReadIntegerExcept(4, 'Error reading birth time');
+    FAccessTime := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'access time'{$ENDIF});
+    FModificationTime := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'modification time'{$ENDIF});
+    FChangeTime := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'change time'{$ENDIF});
+    FBirthTime := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'birth time'{$ENDIF});
   end;
 
   // eventually skip number of attributes
   if (FFlags and (1 shl 4)) <> 0 then
   begin
-    FMaximumCompact := Stream.ReadIntegerExcept(2, 'Error reading maximum number of compact attributes');
-    FMinimumDense := Stream.ReadIntegerExcept(2, 'Error reading minimum number of dense attributes');
+    FMaximumCompact := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'maximum number of compact attributes'{$ENDIF});
+    FMinimumDense := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'minimum number of dense attributes'{$ENDIF});
   end;
 
-  FChunkSize := Stream.ReadIntegerExcept(1 shl (FFlags and 3), 'Error reading chunk size');
+  FChunkSize := Stream.ReadIntegerExcept(1 shl (FFlags and 3){$IFDEF DEBUG}, 'chunk size'{$ENDIF});
 
   ReadObjectHeaderMessages(Stream, Stream.Position + FChunkSize);
 
@@ -1893,9 +1876,9 @@ var
 begin
   while Stream.Position < EndOfStream - 4 do
   begin
-    MessageType := Stream.ReadIntegerExcept(1, 'Error reading message type');
-    MessageSize := Stream.ReadIntegerExcept(2, 'Error reading message size');
-    MessageFlags := Stream.ReadIntegerExcept(1, 'Error reading message flags');
+    MessageType := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'message type'{$ENDIF});
+    MessageSize := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'message size'{$ENDIF});
+    MessageFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'message flags'{$ENDIF});
 
     if (MessageFlags and not 5) <> 0 then
       raise Exception.Create('Unsupported OHDR message flag');

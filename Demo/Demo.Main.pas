@@ -31,13 +31,11 @@ type
     FTextArea: TTextAreaElement;
 
     procedure AddText(Text: String);
-    procedure LoadDefault;
     procedure LoadHdfFile(Buffer: JArrayBuffer);
     procedure PrintFileInformation(HdfFile: THdfFile);
   public
     constructor Create(Owner: IHtmlElementOwner); overload; override;
 
-    procedure Resize(Event: JEvent);
     procedure PrintDataObjectInformation(DataObject: THdfDataObject; Indent: Integer);
   end;
 
@@ -47,7 +45,7 @@ var
 implementation
 
 uses
-  W3C.FileAPI;
+  W3C.FileAPI, W3C.CSSOMView;
 
 { THeader }
 
@@ -65,6 +63,7 @@ end;
 procedure TFileSelect.AfterConstructor;
 begin
   FInputFile := TInputFileElement.Create(Self as IHtmlElementOwner);
+  FInputFile.InputElement.accept := '.hdf,.hdf5,.sofa';
 end;
 
 
@@ -93,26 +92,7 @@ begin
     end);
 
   FTextArea := TTextAreaElement.Create(Self as IHtmlElementOwner);
-  FTextArea.TextAreaElement.Rows := 20;
-
-  LoadDefault;
-end;
-
-procedure TMainScreen.Resize(Event: JEvent);
-begin
-
-end;
-
-procedure TMainScreen.LoadDefault;
-begin
-  var Request := JXMLHttpRequest.Create;
-  Request.onload := lambda
-    LoadHdfFile(JArrayBuffer(Request.response));
-    Result := nil;
-  end;
-  Request.responseType := 'arraybuffer';
-  Request.open('GET', 'default.sofa', true);
-  Request.send;
+  FTextArea.TextAreaElement.Rows := 24;
 end;
 
 procedure TMainScreen.LoadHdfFile(Buffer: JArrayBuffer);
