@@ -5,5 +5,8 @@ A library to load HDF files in the webbrowser. The code is based on PasHdf and t
 ## HDF completeness
 At the moment the library can only read a subset of features available in HDF. However, with some help this could get expanded fully read and write all types of HDF files.
 
+## Online Demo
+Since the compiled JavaScript code can run easily in any browser, a simple demo is available [here](https://rawgit.com/CWBudde/WebHdf/master/Demo/www/index.html)
+
 ## Disclaimer
 The code is based on the original [HDF specifications](https://support.hdfgroup.org/HDF5/doc/H5.format.html) and the source code of [libmysofa](https://github.com/hoene/libmysofa).
