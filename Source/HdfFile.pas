@@ -26,6 +26,7 @@ type
     function ReadFloatExcept(const Count: Integer; const ErrorMessage: String): Float; overload;
     function ReadIntegerExcept(const Count: Integer; const ErrorMessage: String): Integer; overload;
     function ReadBufferExcept(const Count: Integer; const ErrorMessage: String): JUint8Array; overload;
+    function ReadBuffer(const Count: Integer): JUint8Array; overload;
 
     procedure WriteInteger(const Count: Integer; Value: Integer);
     procedure Clear;
@@ -506,14 +507,11 @@ begin
     5:
       Result := FDataView.getUint32(FPosition, True) or (FDataView.getUint8(FPosition + 4) shl 32);
     6:
-      Result := FDataView.getUint32(FPosition, True) or (FDataView.getUint16(FPosition + 4) shl 32);
+      Result := FDataView.getUint32(FPosition, True) or (FDataView.getUint16(FPosition + 4, True) shl 32);
     8:
       Result := FDataView.getUint32(FPosition, True) or (FDataView.getUint32(FPosition + 4, True) shl 32);
     else
-    begin
-      console.Log('Databyte', Count);
       raise Exception.Create(ErrorMessage);
-    end;
   end;
 
   Inc(FPosition, Count);
@@ -554,11 +552,30 @@ begin
   Inc(FPosition, Count);
 end;
 
+function TStream.ReadBufferExcept(const Count: Integer; const ErrorMessage: String): JUint8Array;
+begin
+  if FPosition + Count > FDataView.byteLength then
+    raise Exception.Create('Position exceeds byte length');
+
+  Result := JUint8Array.Create(FDataView.buffer.slice(FPosition, FPosition + Count));
+  Inc(FPosition, Count);
+end;
+
+function TStream.ReadBuffer(const Count: Integer): JUint8Array;
+begin
+  Result := JUint8Array.Create(FDataView.buffer.slice(FPosition, FPosition + Count));
+  Inc(FPosition, Count);
+end;
+
 function TStream.Seek(Position: Integer; IsRelative: Boolean = False): Integer;
 begin
   FPosition := Position + if IsRelative then FPosition;
   if FPosition > FDataView.byteLength then
     FPosition := FDataView.byteLength;
+
+  if FPosition > FDataView.byteLength then
+    raise Exception.Create('Invalid Position');
+
   Result := FPosition;
 end;
 
@@ -575,12 +592,6 @@ begin
       raise Exception.Create('Invalid count');
   end;
 
-  Inc(FPosition, Count);
-end;
-
-function TStream.ReadBufferExcept(const Count: Integer; const ErrorMessage: String): JUint8Array;
-begin
-  Result := JUint8Array.Create(FDataView.buffer.slice(FPosition, FPosition + Count));
   Inc(FPosition, Count);
 end;
 
@@ -904,7 +915,9 @@ begin
   if not (FVersion in [1, 3]) then
     raise Exception.Create('Unsupported version of data type message');
 
-  FClassBitField[0] := Stream.ReadIntegerExcept(3, 'Error reading class bit field');
+  FClassBitField[0] := Stream.ReadIntegerExcept(1, 'Error reading class bit field');
+  FClassBitField[1] := Stream.ReadIntegerExcept(1, 'Error reading class bit field');
+  FClassBitField[2] := Stream.ReadIntegerExcept(1, 'Error reading class bit field');
 
   FSize := Stream.ReadIntegerExcept(4, 'Error reading size');
 
@@ -1053,7 +1066,6 @@ begin
 
   var ElementSize := FDataObject.DatalayoutChunk[FDataObject.DataSpace.Dimensionality];
 
-
   var Output := JUint8Array.Create(Size);
   for var ElementIndex := 0 to 2 * EntriesUsed - 1 do
   begin
@@ -1083,9 +1095,11 @@ begin
       var StreamPos := Stream.Position;
       Stream.Position := ChildPointer;
 
-      var ByteData := Stream.ReadBufferExcept(Elements * ElementSize, 'Error reading buffer');
+      // read data from stream
+      var ByteData := Stream.ReadBufferExcept(ChunkSize, 'Error reading buffer');
       var Inflate := JZlibInflate.Create(ByteData);
-      var Input := Inflate.decompress;
+      var Input := JUint8Array(Inflate.decompress);
+      Assert(Input.byteLength = Elements * ElementSize);
 
       case DataObject.DataSpace.Dimensionality of
         1:
@@ -1473,7 +1487,6 @@ var
   OffsetSize, LengthSize: Integer; // was Int64
   TypeAndVersion: Integer; // was Byte
   OffsetX, LengthX: Integer; // was Int64
-  Temp: Integer; // was Int64
   Name, Value: String;
   Attribute: THdfAttribute;
   HeapHeaderAddress: Integer; // was Int64
@@ -1501,7 +1514,7 @@ begin
 
     if (TypeAndVersion = 3) then
     begin
-      Temp := 0;
+      var Temp := 0;
       Temp := Stream.ReadIntegerExcept(5, 'Error reading magic');
       if Temp <> $40008 then
         raise Exception.Create('Unsupported values');
@@ -1514,21 +1527,13 @@ begin
         raise Exception.Create('Unsupported values');
 
       LengthX := Stream.ReadIntegerExcept(2, 'Error reading length');
-      Temp := 0;
-      Temp := Stream.ReadIntegerExcept(6, 'Error reading unknown value');
-      if Temp = $20200 then
-      begin
-          
-      end
-      else if Temp = $20000 then
-      begin
-        SetLength(Value, LengthX);
-        Value := Stream.ReadTextExcept(LengthX, 'Error reading value');
-      end
-      else if Temp = $20000020000 then
-      begin 
-        Value := '';
-      end;
+      var ValueType := Stream.ReadIntegerExcept(4, 'Error reading unknown value');
+      var TypeExtend := Stream.ReadIntegerExcept(2, 'Error reading unknown value');
+      if (ValueType = $20000) then
+        if (TypeExtend = 0) then
+          Value := Stream.ReadTextExcept(LengthX, 'Error reading value')
+        else if (TypeExtend = 200) then
+          Value := '';
 
       Attribute := THdfAttribute.Create(Name);
       Attribute.ValueAsString := Value;
@@ -1538,14 +1543,13 @@ begin
     else
     if (TypeAndVersion = 1) then
     begin
-      Temp := 0;
+      var Temp := 0;
       Temp := Stream.ReadIntegerExcept(6, 'Error reading magic');
       if Temp <> 0 then
         raise Exception.Create('FHDB type 1 unsupported values');
 
       // read name  
       LengthX := Stream.ReadIntegerExcept(1, 'Error reading length');
-      SetLength(Name, LengthX);
       Name := Stream.ReadTextExcept(LengthX, 'Error reading name');
 
       // read heap header address
