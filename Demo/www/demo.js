@@ -12,6 +12,7 @@ var TObject={
 	Free: function (s) { if (s!==null) s.ClassType.Destroy(s) }
 }
 function StringOfString(s,n) {if (n<1) return "";var r="";while (n>0) {if (n&1) r+=s;n>>=1; s+=s;}return r}
+function StrDeleteRight(s,n) { return s.substr(0, s.length-n) }
 function SetLength(s,n) { if (s.v.length>n) s.v=s.v.substring(0,n);else while (s.v.length<n) s.v+=" "; }
 function Log2(x) { return Math.log(x)/Math.LN2 }
 var Exception={
@@ -180,7 +181,7 @@ var TMainScreen = {
    }
    ,LoadHdfFile:function(Self, Buffer) {
       var HdfFile = null;
-      HdfFile = THdfFile.Create$255($New(THdfFile));
+      HdfFile = THdfFile.Create$260($New(THdfFile));
       try {
          THdfFile.LoadFromBuffer(HdfFile,Buffer);
          TMainScreen.PrintFileInformation(Self,HdfFile);
@@ -218,7 +219,7 @@ var TMainScreen = {
          }
       }
       if (DataObject$3.FData) {
-         TMainScreen.AddText(Self,IndentStr+"Data Size: "+DataObject$3.FData.byteLength.toString());
+         TMainScreen.AddText(Self,IndentStr+"Data Size: "+TStream.a$35(DataObject$3.FData).toString());
       }
       if (THdfDataObject.GetDataObjectCount(DataObject$3)>0) {
          TMainScreen.AddText(Self,IndentStr+"Data Objects: ");
@@ -445,7 +446,7 @@ var TStream = {
    ,Clear$1:function(Self) {
       Self.FPosition = 0;
    }
-   ,Create$250:function(Self, Buffer$1) {
+   ,Create$255:function(Self, Buffer$1) {
       Self.FPosition = 0;
       Self.FDataView = new DataView(Buffer$1);
       return Self
@@ -492,18 +493,16 @@ var TStream = {
       (Self.FPosition+= Count$1);
       return Result
    }
-   ,ReadTextExcept:function(Self, Count$2) {
+   ,ReadStringExcept:function(Self, Count$2) {
       var Result = "";
-      var Index$1 = 0;
-      var ByteValue = 0;
+      var Decoder = null;
       if (Self.FPosition+Count$2>Self.FDataView.byteLength) {
          throw Exception.Create($New(Exception),"Position exceeds byte length");
       }
-      Result = "";
-      var $temp4;
-      for(Index$1=0,$temp4=Count$2;Index$1<$temp4;Index$1++) {
-         ByteValue = Self.FDataView.getUint8(Self.FPosition+Index$1);
-         Result+=Chr(ByteValue);
+      Decoder = new TextDecoder();
+      Result = Decoder.decode(Self.FDataView.buffer.slice(Self.FPosition,Self.FPosition+Count$2));
+      if (!Result.charCodeAt(Result.length-1)) {
+         Result = StrDeleteRight(Result,1);
       }
       (Self.FPosition+= Count$2);
       return Result
@@ -519,6 +518,16 @@ var TStream = {
       }
       Result = Self.FPosition;
       return Result
+   }
+   ,WriteBuffer:function(Self, Buffer$2) {
+      var OldBuffer = null,
+         NewBuffer = null;
+      OldBuffer = Self.FDataView.buffer;
+      NewBuffer = new Uint8Array(OldBuffer.byteLength+Buffer$2.byteLength);
+      NewBuffer.set(OldBuffer,0);
+      NewBuffer.set(Buffer$2,OldBuffer.byteLength);
+      Self.FDataView = new DataView(NewBuffer.buffer);
+      Self.FPosition = NewBuffer.byteLength;
    }
    ,WriteInteger:function(Self, Count$3, Value$6) {
       switch (Count$3) {
@@ -536,6 +545,11 @@ var TStream = {
       }
       (Self.FPosition+= Count$3);
    }
+   ,WriteString:function(Self, Value$7) {
+      var Encoder = null;
+      Encoder = new TextEncoder();
+      TStream.WriteBuffer(Self,Encoder.encode(Value$7));
+   }
    ,Destroy:TObject.Destroy
 };
 var THdfSuperBlock = {
@@ -552,7 +566,7 @@ var THdfSuperBlock = {
       if (Identifier!=137) {
          throw Exception.Create($New(Exception),"The file is not a valid HDF");
       }
-      Self.FFormatSignature = TStream.ReadTextExcept(Stream,3);
+      Self.FFormatSignature = TStream.ReadStringExcept(Stream,3);
       if (Self.FFormatSignature!="HDF") {
          throw Exception.Create($New(Exception),"The file is not a valid HDF");
       }
@@ -591,7 +605,7 @@ var THdfDataObjectMessage = {
       $.FDataObject = $.FSuperBlock = null;
       $.FVersion$1 = 0;
    }
-   ,Create$251:function(Self, SuperBlock$3, DataObject$4) {
+   ,Create$256:function(Self, SuperBlock$3, DataObject$4) {
       Self.FSuperBlock = SuperBlock$3;
       Self.FDataObject = DataObject$4;
       return Self
@@ -639,7 +653,7 @@ var THdfMessageHeaderContinuation = {
       Self.FLength = TStream.ReadIntegerExcept(Stream$3,Self.FSuperBlock.FLengthsSize);
       StreamPos = Stream$3.FPosition;
       Stream$3.FPosition = Self.FOffset;
-      Signature = TStream.ReadTextExcept(Stream$3,4);
+      Signature = TStream.ReadStringExcept(Stream$3,4);
       if (Signature!="OCHK") {
          throw Exception.Create($New(Exception),("Wrong signature ("+Signature.toString()+")"));
       }
@@ -680,7 +694,7 @@ var THdfMessageFilterPipeline = {
       $.FFilters = 0;
    }
    ,LoadFromStream$1:function(Self, Stream$5) {
-      var Index$2 = 0;
+      var Index$1 = 0;
       var FilterIdentificationValue = 0;
       var Flags$1 = 0;
       var NumberClientDataValues = 0;
@@ -694,16 +708,16 @@ var THdfMessageFilterPipeline = {
       if (Self.FFilters>32) {
          throw Exception.Create($New(Exception),"filter pipeline message has too many filters");
       }
-      var $temp5;
-      for(Index$2=0,$temp5=Self.FFilters;Index$2<$temp5;Index$2++) {
+      var $temp4;
+      for(Index$1=0,$temp4=Self.FFilters;Index$1<$temp4;Index$1++) {
          FilterIdentificationValue = TStream.ReadIntegerExcept(Stream$5,2);
          if (([1,2].indexOf(~FilterIdentificationValue)>=0)) {
             throw Exception.Create($New(Exception),"Unsupported filter");
          }
          Flags$1 = TStream.ReadIntegerExcept(Stream$5,2);
          NumberClientDataValues = TStream.ReadIntegerExcept(Stream$5,2);
-         var $temp6;
-         for(ValueIndex=0,$temp6=NumberClientDataValues;ValueIndex<$temp6;ValueIndex++) {
+         var $temp5;
+         for(ValueIndex=0,$temp5=NumberClientDataValues;ValueIndex<$temp5;ValueIndex++) {
             ClientData = TStream.ReadIntegerExcept(Stream$5,4);
          }
       }
@@ -732,37 +746,37 @@ var THdfMessageDataType = {
       Self.FSize = TStream.ReadIntegerExcept(Stream$6,4);
       switch (Self.FDataClass) {
          case 0 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeFixedPoint),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeFixedPoint),Self);
             break;
          case 1 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeFloatingPoint),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeFloatingPoint),Self);
             break;
          case 2 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeTime),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeTime),Self);
             break;
          case 3 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeString),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeString),Self);
             break;
          case 4 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeBitfield),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeBitfield),Self);
             break;
          case 5 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeOpaque),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeOpaque),Self);
             break;
          case 6 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeCompound),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeCompound),Self);
             break;
          case 7 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeReference),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeReference),Self);
             break;
          case 8 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeEnumerated),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeEnumerated),Self);
             break;
          case 9 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeVariableLength),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeVariableLength),Self);
             break;
          case 10 :
-            Self.FDataType = THdfBaseDataType.Create$256$($New(THdfDataTypeArray),Self);
+            Self.FDataType = THdfBaseDataType.Create$261$($New(THdfDataTypeArray),Self);
             break;
          default :
             throw Exception.Create($New(Exception),("Unknown datatype ("+Self.FDataClass.toString()+")"));
@@ -782,16 +796,16 @@ var THdfMessageDataSpace = {
       $.FDimensionMaxSize = [];
       $.FDimensionSize = [];
    }
-   ,GetDimension:function(Self, Index$3) {
+   ,GetDimension:function(Self, Index$2) {
       var Result = 0;
-      if (Index$3<0||Index$3>=Self.FDimensionSize.length) {
-         throw Exception.Create($New(Exception),("Index out of bounds ("+Index$3.toString()+")"));
+      if (Index$2<0||Index$2>=Self.FDimensionSize.length) {
+         throw Exception.Create($New(Exception),("Index out of bounds ("+Index$2.toString()+")"));
       }
-      Result = Self.FDimensionSize[Index$3];
+      Result = Self.FDimensionSize[Index$2];
       return Result
    }
    ,LoadFromStream$1:function(Self, Stream$7) {
-      var Index$4 = 0;
+      var Index$3 = 0;
       var Size$2 = 0,
          MaxSize = 0;
       THdfDataObjectMessage.LoadFromStream$1(Self,Stream$7);
@@ -805,14 +819,14 @@ var THdfMessageDataSpace = {
          throw Exception.Create($New(Exception),"Unsupported version of dataspace message");
       }
       Self.FType = TStream.ReadIntegerExcept(Stream$7,1);
-      var $temp7;
-      for(Index$4=0,$temp7=Self.FDimensionality;Index$4<$temp7;Index$4++) {
+      var $temp6;
+      for(Index$3=0,$temp6=Self.FDimensionality;Index$3<$temp6;Index$3++) {
          Size$2 = TStream.ReadIntegerExcept(Stream$7,Self.FSuperBlock.FLengthsSize);
          Self.FDimensionSize.push(Size$2);
       }
       if (Self.FFlags$2&1) {
-         var $temp8;
-         for(Index$4=0,$temp8=Self.FDimensionality;Index$4<$temp8;Index$4++) {
+         var $temp7;
+         for(Index$3=0,$temp7=Self.FDimensionality;Index$3<$temp7;Index$3++) {
             MaxSize = TStream.ReadIntegerExcept(Stream$7,Self.FSuperBlock.FLengthsSize);
             Self.FDimensionMaxSize.push(MaxSize);
          }
@@ -872,12 +886,11 @@ var THdfMessageDataLayout = {
          x$16 = 0,
          z$2 = 0,
          y$15 = 0,
-         OldData = null,
          CheckSum = 0;
       if (Self.FDataObject.FDataSpace.FDimensionality>3) {
          throw Exception.Create($New(EHdfInvalidFormat),"Error reading dimensions");
       }
-      Signature$1 = TStream.ReadTextExcept(Stream$8,4);
+      Signature$1 = TStream.ReadStringExcept(Stream$8,4);
       if (Signature$1!="TREE") {
          throw Exception.Create($New(Exception),("Wrong signature ("+Signature$1.toString()+")"));
       }
@@ -887,14 +900,14 @@ var THdfMessageDataLayout = {
       AddressLeftSibling = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FOffsetSize);
       AddressRightSibling = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FOffsetSize);
       Elements = 1;
-      var $temp9;
-      for(DimensionIndex=0,$temp9=Self.FDataObject.FDataSpace.FDimensionality;DimensionIndex<$temp9;DimensionIndex++) {
+      var $temp8;
+      for(DimensionIndex=0,$temp8=Self.FDataObject.FDataSpace.FDimensionality;DimensionIndex<$temp8;DimensionIndex++) {
          Elements*=THdfDataObject.GetDataLayoutChunk(Self.FDataObject,DimensionIndex);
       }
       ElementSize = THdfDataObject.GetDataLayoutChunk(Self.FDataObject,Self.FDataObject.FDataSpace.FDimensionality);
       Output = new Uint8Array(Size$3);
-      var $temp10;
-      for(ElementIndex=0,$temp10=(EntriesUsed*2);ElementIndex<$temp10;ElementIndex++) {
+      var $temp9;
+      for(ElementIndex=0,$temp9=(EntriesUsed*2);ElementIndex<$temp9;ElementIndex++) {
          if (!NodeType) {
             Key = TStream.ReadIntegerExcept(Stream$8,Self.FSuperBlock.FLengthsSize);
          } else {
@@ -903,8 +916,8 @@ var THdfMessageDataLayout = {
             if (FilterMask) {
                throw Exception.Create($New(Exception),"All filters must be enabled");
             }
-            var $temp11;
-            for(DimensionIndex$1=0,$temp11=Self.FDataObject.FDataSpace.FDimensionality;DimensionIndex$1<$temp11;DimensionIndex$1++) {
+            var $temp10;
+            for(DimensionIndex$1=0,$temp10=Self.FDataObject.FDataSpace.FDimensionality;DimensionIndex$1<$temp10;DimensionIndex$1++) {
                StartPos = TStream.ReadIntegerExcept(Stream$8,8);
                Start.push(StartPos);
             }
@@ -922,8 +935,8 @@ var THdfMessageDataLayout = {
             switch (Self.FDataObject.FDataSpace.FDimensionality) {
                case 1 :
                   sx = Self.FDataObject.FDataSpace.FDimensionSize[0];
-                  var $temp12;
-                  for(ByteIndex=0,$temp12=(Elements*ElementSize);ByteIndex<$temp12;ByteIndex++) {
+                  var $temp11;
+                  for(ByteIndex=0,$temp11=(Elements*ElementSize);ByteIndex<$temp11;ByteIndex++) {
                      b$1 = $Div(ByteIndex,Elements);
                      x$14 = ByteIndex%Elements+Start[0];
                      if (x$14<sx) {
@@ -935,8 +948,8 @@ var THdfMessageDataLayout = {
                   sx$1 = Self.FDataObject.FDataSpace.FDimensionSize[0];
                   sy = Self.FDataObject.FDataSpace.FDimensionSize[1];
                   dy$1 = THdfDataObject.GetDataLayoutChunk(Self.FDataObject,1);
-                  var $temp13;
-                  for(ByteIndex$1=0,$temp13=(Elements*ElementSize);ByteIndex$1<$temp13;ByteIndex$1++) {
+                  var $temp12;
+                  for(ByteIndex$1=0,$temp12=(Elements*ElementSize);ByteIndex$1<$temp12;ByteIndex$1++) {
                      b$2 = $Div(ByteIndex$1,Elements);
                      x$15 = ByteIndex$1%Elements;
                      y$14 = x$15%dy$1+Start[1];
@@ -952,8 +965,8 @@ var THdfMessageDataLayout = {
                   sz = Self.FDataObject.FDataSpace.FDimensionSize[2];
                   dy$2 = THdfDataObject.GetDataLayoutChunk(Self.FDataObject,1);
                   dz = THdfDataObject.GetDataLayoutChunk(Self.FDataObject,2);
-                  var $temp14;
-                  for(ByteIndex$2=0,$temp14=(Elements*ElementSize);ByteIndex$2<$temp14;ByteIndex$2++) {
+                  var $temp13;
+                  for(ByteIndex$2=0,$temp13=(Elements*ElementSize);ByteIndex$2<$temp13;ByteIndex$2++) {
                      b$3 = $Div(ByteIndex$2,Elements);
                      x$16 = ByteIndex$2%Elements;
                      z$2 = x$16%dz+Start[2];
@@ -968,18 +981,11 @@ var THdfMessageDataLayout = {
             Stream$8.FPosition = StreamPos$1;
          }
       }
-      if (Self.FDataObject.FData) {
-         OldData = Self.FDataObject.FData;
-         Self.FDataObject.FData = new Uint8Array(OldData.byteLength+Output.byteLength);
-         Self.FDataObject.FData.set(OldData,0);
-         Self.FDataObject.FData.set(Output,OldData.byteLength);
-      } else {
-         Self.FDataObject.FData = Output;
-      }
+      TStream.WriteBuffer(Self.FDataObject.FData,Output);
       CheckSum = TStream.ReadIntegerExcept(Stream$8,4);
    }
    ,LoadFromStream$1:function(Self, Stream$9) {
-      var Index$5 = 0;
+      var Index$4 = 0;
       var StreamPos$2 = 0;
       var Size$4 = 0;
       var DataLayoutChunk$1 = 0;
@@ -991,7 +997,7 @@ var THdfMessageDataLayout = {
       switch (Self.FLayoutClass) {
          case 0 :
             Self.FDataSize = TStream.ReadIntegerExcept(Stream$9,2);
-            Self.FDataObject.FData = TStream.ReadBufferExcept(Stream$9,Self.FDataSize);
+            TStream.WriteBuffer(Self.FDataObject.FData,TStream.ReadBufferExcept(Stream$9,Self.FDataSize));
             break;
          case 1 :
             Self.FDataAddress = TStream.ReadIntegerExcept(Stream$9,Self.FSuperBlock.FOffsetSize);
@@ -999,22 +1005,22 @@ var THdfMessageDataLayout = {
             if (Self.FDataAddress>0) {
                StreamPos$2 = Stream$9.FPosition;
                Stream$9.FPosition = Self.FDataAddress;
-               Self.FDataObject.FData = TStream.ReadBufferExcept(Stream$9,Self.FDataSize);
+               TStream.WriteBuffer(Self.FDataObject.FData,TStream.ReadBufferExcept(Stream$9,Self.FDataSize));
                Stream$9.FPosition = StreamPos$2;
             }
             break;
          case 2 :
             Self.FDimensionality$1 = TStream.ReadIntegerExcept(Stream$9,1);
             Self.FDataAddress = TStream.ReadIntegerExcept(Stream$9,Self.FSuperBlock.FOffsetSize);
-            var $temp15;
-            for(Index$5=0,$temp15=Self.FDimensionality$1;Index$5<$temp15;Index$5++) {
+            var $temp14;
+            for(Index$4=0,$temp14=Self.FDimensionality$1;Index$4<$temp14;Index$4++) {
                DataLayoutChunk$1 = TStream.ReadIntegerExcept(Stream$9,4);
                Self.FDataObject.FDataLayoutChunk.push(DataLayoutChunk$1);
             }
             Size$4 = Self.FDataObject.FDataLayoutChunk[Self.FDimensionality$1-1];
-            var $temp16;
-            for(Index$5=0,$temp16=Self.FDataObject.FDataSpace.FDimensionality;Index$5<$temp16;Index$5++) {
-               Size$4*=Self.FDataObject.FDataSpace.FDimensionSize[Index$5];
+            var $temp15;
+            for(Index$4=0,$temp15=Self.FDataObject.FDataSpace.FDimensionality;Index$4<$temp15;Index$4++) {
+               Size$4*=Self.FDataObject.FDataSpace.FDimensionSize[Index$4];
             }
             if (Self.FDataAddress>0&&Self.FDataAddress<Self.FSuperBlock.FEndOfFileAddress) {
                StreamPos$2 = Stream$9.FPosition;
@@ -1091,12 +1097,12 @@ var THdfMessageAttribute = {
       Self.FDatatypeSize = TStream.ReadIntegerExcept(Stream$12,2);
       Self.FDataspaceSize = TStream.ReadIntegerExcept(Stream$12,2);
       Self.FEncoding = TStream.ReadIntegerExcept(Stream$12,1);
-      Self.FName$1 = TStream.ReadTextExcept(Stream$12,Self.FNameSize);
-      Self.FDatatypeMessage = THdfDataObjectMessage.Create$251($New(THdfMessageDataType),Self.FSuperBlock,Self.FDataObject);
+      Self.FName$1 = TStream.ReadStringExcept(Stream$12,Self.FNameSize);
+      Self.FDatatypeMessage = THdfDataObjectMessage.Create$256($New(THdfMessageDataType),Self.FSuperBlock,Self.FDataObject);
       THdfDataObjectMessage.LoadFromStream$1$(Self.FDatatypeMessage,Stream$12);
-      Self.FDataspaceMessage = THdfDataObjectMessage.Create$251($New(THdfMessageDataSpace),Self.FSuperBlock,Self.FDataObject);
+      Self.FDataspaceMessage = THdfDataObjectMessage.Create$256($New(THdfMessageDataSpace),Self.FSuperBlock,Self.FDataObject);
       THdfDataObjectMessage.LoadFromStream$1$(Self.FDataspaceMessage,Stream$12);
-      Attribute = THdfAttribute.Create$262($New(THdfAttribute),Self.FName$1);
+      Attribute = THdfAttribute.Create$267($New(THdfAttribute),Self.FName$1);
       THdfDataObject.AddAttribute(Self.FDataObject,Attribute);
       if (!Self.FDataspaceMessage.FDimensionality) {
          THdfMessageAttribute.ReadData(Self,Stream$12,Attribute);
@@ -1107,37 +1113,37 @@ var THdfMessageAttribute = {
    ,ReadData:function(Self, Stream$13, Attribute$1) {
       var Name$6 = {};
       Name$6.v = "";
-      var Value$7 = 0;
+      var Value$8 = 0;
       var Dimension$1 = 0;
       var EndAddress = 0;
       switch (Self.FDatatypeMessage.FDataClass) {
          case 3 :
             SetLength(Name$6,Self.FDatatypeMessage.FSize);
-            Name$6.v = TStream.ReadTextExcept(Stream$13,Self.FDatatypeMessage.FSize);
+            Name$6.v = TStream.ReadStringExcept(Stream$13,Self.FDatatypeMessage.FSize);
             THdfAttribute.SetValueAsString(Attribute$1,Name$6.v);
             break;
          case 6 :
             TStream.Seek(Stream$13,Self.FDatatypeMessage.FSize,true);
             break;
          case 7 :
-            Value$7 = TStream.ReadIntegerExcept(Stream$13,4);
-            THdfAttribute.SetValueAsInteger(Attribute$1,Value$7);
+            Value$8 = TStream.ReadIntegerExcept(Stream$13,4);
+            THdfAttribute.SetValueAsInteger(Attribute$1,Value$8);
             break;
          case 9 :
             Dimension$1 = TStream.ReadIntegerExcept(Stream$13,4);
             EndAddress = TStream.ReadIntegerExcept(Stream$13,4);
-            Value$7 = TStream.ReadIntegerExcept(Stream$13,4);
-            Value$7 = TStream.ReadIntegerExcept(Stream$13,4);
+            Value$8 = TStream.ReadIntegerExcept(Stream$13,4);
+            Value$8 = TStream.ReadIntegerExcept(Stream$13,4);
             break;
          default :
             throw Exception.Create($New(Exception),"Error: unknown data class");
       }
    }
    ,ReadDataDimension:function(Self, Stream$14, Attribute$2, Dimension$2) {
-      var Index$6 = 0;
+      var Index$5 = 0;
       if (Self.FDataspaceMessage.FDimensionSize.length>0) {
-         var $temp17;
-         for(Index$6=0,$temp17=Self.FDataspaceMessage.FDimensionSize[0];Index$6<$temp17;Index$6++) {
+         var $temp16;
+         for(Index$5=0,$temp16=Self.FDataspaceMessage.FDimensionSize[0];Index$5<$temp16;Index$5++) {
             if (1<Self.FDataspaceMessage.FDimensionality) {
                THdfMessageAttribute.ReadDataDimension(Self,Stream$14,Attribute$2,Dimension$2+1);
             } else {
@@ -1157,14 +1163,14 @@ var THdfCustomBlock = {
       $.FDataObject$1 = $.FFractalHeap = $.FSuperBlock$1 = null;
       $.FSignature = "";
    }
-   ,Create$252:function(Self, SuperBlock$4, FractalHeap, DataObject$5) {
+   ,Create$257:function(Self, SuperBlock$4, FractalHeap, DataObject$5) {
       Self.FSuperBlock$1 = SuperBlock$4;
       Self.FFractalHeap = FractalHeap;
       Self.FDataObject$1 = DataObject$5;
       return Self
    }
    ,LoadFromStream$12:function(Self, Stream$15) {
-      Self.FSignature = TStream.ReadTextExcept(Stream$15,4);
+      Self.FSignature = TStream.ReadStringExcept(Stream$15,4);
       if (Self.FSignature!=THdfCustomBlock.GetSignature$(Self.ClassType)) {
          throw Exception.Create($New(Exception),("Wrong signature ("+Self.FSignature.toString()+")"));
       }
@@ -1177,7 +1183,7 @@ var THdfCustomBlock = {
       Self.FBlockOffset = TStream.ReadIntegerExcept(Stream$15,$Div(Self.FFractalHeap.FMaximumHeapSize+7,8));
    }
    ,Destroy:TObject.Destroy
-   ,Create$252$:function($){return $.ClassType.Create$252.apply($.ClassType, arguments)}
+   ,Create$257$:function($){return $.ClassType.Create$257.apply($.ClassType, arguments)}
    ,GetSignature$:function($){return $.GetSignature($)}
    ,LoadFromStream$12$:function($){return $.ClassType.LoadFromStream$12.apply($.ClassType, arguments)}
 };
@@ -1190,8 +1196,8 @@ var THdfIndirectBlock = {
    ,GetSignature:function(Self) {
       return "FHIB";
    }
-   ,Create$252:function(Self, SuperBlock$5, FractalHeap$1, DataObject$6) {
-      THdfCustomBlock.Create$252(Self,SuperBlock$5,FractalHeap$1,DataObject$6);
+   ,Create$257:function(Self, SuperBlock$5, FractalHeap$1, DataObject$6) {
+      THdfCustomBlock.Create$257(Self,SuperBlock$5,FractalHeap$1,DataObject$6);
       Self.FInitialBlockSize = FractalHeap$1.FStartingBlockSize;
       return Self
    }
@@ -1226,7 +1232,7 @@ var THdfIndirectBlock = {
          if (ChildBlockAddress>0&&ChildBlockAddress<Self.FSuperBlock$1.FEndOfFileAddress) {
             StreamPosition = Stream$16.FPosition;
             Stream$16.FPosition = ChildBlockAddress;
-            Block = THdfCustomBlock.Create$252$($New(THdfDirectBlock),Self.FSuperBlock$1,Self.FFractalHeap,Self.FDataObject$1);
+            Block = THdfCustomBlock.Create$257$($New(THdfDirectBlock),Self.FSuperBlock$1,Self.FFractalHeap,Self.FDataObject$1);
             THdfCustomBlock.LoadFromStream$12$(Block,Stream$16);
             Stream$16.FPosition = StreamPosition;
          }
@@ -1238,7 +1244,7 @@ var THdfIndirectBlock = {
          if (ChildBlockAddress>0&&ChildBlockAddress<Self.FSuperBlock$1.FEndOfFileAddress) {
             StreamPosition = Stream$16.FPosition;
             Stream$16.FPosition = ChildBlockAddress;
-            Block = THdfCustomBlock.Create$252$($New(THdfIndirectBlock),Self.FSuperBlock$1,Self.FFractalHeap,Self.FDataObject$1);
+            Block = THdfCustomBlock.Create$257$($New(THdfIndirectBlock),Self.FSuperBlock$1,Self.FFractalHeap,Self.FDataObject$1);
             THdfCustomBlock.LoadFromStream$12$(Block,Stream$16);
             Stream$16.FPosition = StreamPosition;
          }
@@ -1246,7 +1252,7 @@ var THdfIndirectBlock = {
       }
    }
    ,Destroy:TObject.Destroy
-   ,Create$252$:function($){return $.ClassType.Create$252.apply($.ClassType, arguments)}
+   ,Create$257$:function($){return $.ClassType.Create$257.apply($.ClassType, arguments)}
    ,GetSignature$:function($){return $.GetSignature($)}
    ,LoadFromStream$12$:function($){return $.ClassType.LoadFromStream$12.apply($.ClassType, arguments)}
 };
@@ -1258,14 +1264,14 @@ var THdfFractalHeap = {
       $.FDataObject$2 = $.FSuperBlock$2 = null;
       $.FSignature$1 = "";
    }
-   ,Create$254:function(Self, SuperBlock$6, DataObject$7) {
+   ,Create$259:function(Self, SuperBlock$6, DataObject$7) {
       Self.FSuperBlock$2 = SuperBlock$6;
       Self.FDataObject$2 = DataObject$7;
       return Self
    }
    ,LoadFromStream$14:function(Self, Stream$17) {
       var Block$1 = null;
-      Self.FSignature$1 = TStream.ReadTextExcept(Stream$17,4);
+      Self.FSignature$1 = TStream.ReadStringExcept(Stream$17,4);
       if (Self.FSignature$1!="FRHP") {
          throw Exception.Create($New(Exception),("Wrong signature ("+Self.FSignature$1.toString()+")"));
       }
@@ -1309,9 +1315,9 @@ var THdfFractalHeap = {
       if (Self.FAddressOfRootBlock>0&&Self.FAddressOfRootBlock<Self.FSuperBlock$2.FEndOfFileAddress) {
          Stream$17.FPosition = Self.FAddressOfRootBlock;
          if (Self.FCurrentNumberOfRows) {
-            Block$1 = THdfCustomBlock.Create$252$($New(THdfIndirectBlock),Self.FSuperBlock$2,Self,Self.FDataObject$2);
+            Block$1 = THdfCustomBlock.Create$257$($New(THdfIndirectBlock),Self.FSuperBlock$2,Self,Self.FDataObject$2);
          } else {
-            Block$1 = THdfCustomBlock.Create$252$($New(THdfDirectBlock),Self.FSuperBlock$2,Self,Self.FDataObject$2);
+            Block$1 = THdfCustomBlock.Create$257$($New(THdfDirectBlock),Self.FSuperBlock$2,Self,Self.FDataObject$2);
          }
          THdfCustomBlock.LoadFromStream$12$(Block$1,Stream$17);
       }
@@ -1324,14 +1330,14 @@ var THdfFile = {
       TObject.$Init($);
       $.FDataObject$3 = $.FSuperBlock$3 = null;
    }
-   ,Create$255:function(Self) {
+   ,Create$260:function(Self) {
       TObject.Create(Self);
       Self.FSuperBlock$3 = TObject.Create($New(THdfSuperBlock));
-      Self.FDataObject$3 = THdfDataObject.Create$260($New(THdfDataObject),Self.FSuperBlock$3);
+      Self.FDataObject$3 = THdfDataObject.Create$265($New(THdfDataObject),Self.FSuperBlock$3);
       return Self
    }
-   ,LoadFromBuffer:function(Self, Buffer$2) {
-      THdfFile.LoadFromStream$15(Self,TStream.Create$250($New(TStream),Buffer$2));
+   ,LoadFromBuffer:function(Self, Buffer$3) {
+      THdfFile.LoadFromStream$15(Self,TStream.Create$255($New(TStream),Buffer$3));
    }
    ,LoadFromStream$15:function(Self, Stream$18) {
       THdfSuperBlock.LoadFromStream(Self.FSuperBlock$3,Stream$18);
@@ -1354,7 +1360,7 @@ var THdfDirectBlock = {
       var OffsetX = 0;
       var LengthX = 0;
       var Name$7 = "";
-      var Value$8 = "";
+      var Value$9 = "";
       var Attribute$3 = null;
       var HeapHeaderAddress = 0;
       var StreamPos$3 = 0;
@@ -1385,7 +1391,7 @@ var THdfDirectBlock = {
             if (Temp!=262152) {
                throw Exception.Create($New(Exception),"Unsupported values");
             }
-            Name$7 = TStream.ReadTextExcept(Stream$19,LengthX);
+            Name$7 = TStream.ReadStringExcept(Stream$19,LengthX);
             Temp = 0;
             Temp = TStream.ReadIntegerExcept(Stream$19,4);
             if (Temp!=19) {
@@ -1396,13 +1402,13 @@ var THdfDirectBlock = {
             TypeExtend = TStream.ReadIntegerExcept(Stream$19,2);
             if (ValueType==131072) {
                if (!TypeExtend) {
-                  Value$8 = TStream.ReadTextExcept(Stream$19,LengthX);
+                  Value$9 = TStream.ReadStringExcept(Stream$19,LengthX);
                } else if (TypeExtend==200) {
-                  Value$8 = "";
+                  Value$9 = "";
                }
             }
-            Attribute$3 = THdfAttribute.Create$262($New(THdfAttribute),Name$7);
-            THdfAttribute.SetValueAsString(Attribute$3,Value$8);
+            Attribute$3 = THdfAttribute.Create$267($New(THdfAttribute),Name$7);
+            THdfAttribute.SetValueAsString(Attribute$3,Value$9);
             THdfDataObject.AddAttribute(Self.FDataObject$1,Attribute$3);
          } else if (TypeAndVersion==1) {
             Temp$1 = 0;
@@ -1411,11 +1417,11 @@ var THdfDirectBlock = {
                throw Exception.Create($New(Exception),"FHDB type 1 unsupported values");
             }
             LengthX = TStream.ReadIntegerExcept(Stream$19,1);
-            Name$7 = TStream.ReadTextExcept(Stream$19,LengthX);
+            Name$7 = TStream.ReadStringExcept(Stream$19,LengthX);
             HeapHeaderAddress = TStream.ReadIntegerExcept(Stream$19,Self.FSuperBlock$1.FOffsetSize);
             StreamPos$3 = Stream$19.FPosition;
             Stream$19.FPosition = HeapHeaderAddress;
-            SubDataObject = THdfDataObject.Create$261($New(THdfDataObject),Self.FSuperBlock$1,Name$7);
+            SubDataObject = THdfDataObject.Create$266($New(THdfDataObject),Self.FSuperBlock$1,Name$7);
             THdfDataObject.LoadFromStream$24(SubDataObject,Stream$19);
             THdfDataObject.AddDataObject(Self.FDataObject$1,SubDataObject);
             Stream$19.FPosition = StreamPos$3;
@@ -1423,7 +1429,7 @@ var THdfDirectBlock = {
       } while (!(TypeAndVersion==0));
    }
    ,Destroy:TObject.Destroy
-   ,Create$252:THdfCustomBlock.Create$252
+   ,Create$257:THdfCustomBlock.Create$257
    ,GetSignature$:function($){return $.GetSignature($)}
    ,LoadFromStream$12$:function($){return $.ClassType.LoadFromStream$12.apply($.ClassType, arguments)}
 };
@@ -1433,7 +1439,7 @@ var THdfBaseDataType = {
       TObject.$Init($);
       $.FDataTypeMessage = null;
    }
-   ,Create$256:function(Self, DatatypeMessage) {
+   ,Create$261:function(Self, DatatypeMessage) {
       Self.FDataTypeMessage = DatatypeMessage;
       return Self
    }
@@ -1441,7 +1447,7 @@ var THdfBaseDataType = {
       /* null */
    }
    ,Destroy:TObject.Destroy
-   ,Create$256$:function($){return $.ClassType.Create$256.apply($.ClassType, arguments)}
+   ,Create$261$:function($){return $.ClassType.Create$261.apply($.ClassType, arguments)}
    ,LoadFromStream$17$:function($){return $.ClassType.LoadFromStream$17.apply($.ClassType, arguments)}
 };
 var THdfDataTypeVariableLength = {
@@ -1450,16 +1456,16 @@ var THdfDataTypeVariableLength = {
       THdfBaseDataType.$Init($);
       $.FDataType$1 = null;
    }
-   ,Create$256:function(Self, DatatypeMessage$1) {
-      THdfBaseDataType.Create$256(Self,DatatypeMessage$1);
-      Self.FDataType$1 = THdfDataObjectMessage.Create$251($New(THdfMessageDataType),Self.FDataTypeMessage.FSuperBlock,Self.FDataTypeMessage.FDataObject);
+   ,Create$261:function(Self, DatatypeMessage$1) {
+      THdfBaseDataType.Create$261(Self,DatatypeMessage$1);
+      Self.FDataType$1 = THdfDataObjectMessage.Create$256($New(THdfMessageDataType),Self.FDataTypeMessage.FSuperBlock,Self.FDataTypeMessage.FDataObject);
       return Self
    }
    ,LoadFromStream$17:function(Self, Stream$21) {
       THdfDataObjectMessage.LoadFromStream$1$(Self.FDataType$1,Stream$21);
    }
    ,Destroy:TObject.Destroy
-   ,Create$256$:function($){return $.ClassType.Create$256.apply($.ClassType, arguments)}
+   ,Create$261$:function($){return $.ClassType.Create$261.apply($.ClassType, arguments)}
    ,LoadFromStream$17$:function($){return $.ClassType.LoadFromStream$17.apply($.ClassType, arguments)}
 };
 var THdfDataTypeTime = {
@@ -1472,7 +1478,7 @@ var THdfDataTypeTime = {
       Self.FBitPrecision = TStream.ReadIntegerExcept(Stream$22,2);
    }
    ,Destroy:TObject.Destroy
-   ,Create$256:THdfBaseDataType.Create$256
+   ,Create$261:THdfBaseDataType.Create$261
    ,LoadFromStream$17$:function($){return $.ClassType.LoadFromStream$17.apply($.ClassType, arguments)}
 };
 var THdfDataTypeString = {
@@ -1481,7 +1487,7 @@ var THdfDataTypeString = {
       THdfBaseDataType.$Init($);
    }
    ,Destroy:TObject.Destroy
-   ,Create$256:THdfBaseDataType.Create$256
+   ,Create$261:THdfBaseDataType.Create$261
    ,LoadFromStream$17:THdfBaseDataType.LoadFromStream$17
 };
 var THdfDataTypeReference = {
@@ -1490,7 +1496,7 @@ var THdfDataTypeReference = {
       THdfBaseDataType.$Init($);
    }
    ,Destroy:TObject.Destroy
-   ,Create$256:THdfBaseDataType.Create$256
+   ,Create$261:THdfBaseDataType.Create$261
    ,LoadFromStream$17:THdfBaseDataType.LoadFromStream$17
 };
 var THdfDataTypeOpaque = {
@@ -1499,7 +1505,7 @@ var THdfDataTypeOpaque = {
       THdfBaseDataType.$Init($);
    }
    ,Destroy:TObject.Destroy
-   ,Create$256:THdfBaseDataType.Create$256
+   ,Create$261:THdfBaseDataType.Create$261
    ,LoadFromStream$17:THdfBaseDataType.LoadFromStream$17
 };
 var THdfDataTypeFloatingPoint = {
@@ -1553,7 +1559,7 @@ var THdfDataTypeFloatingPoint = {
       }
    }
    ,Destroy:TObject.Destroy
-   ,Create$256:THdfBaseDataType.Create$256
+   ,Create$261:THdfBaseDataType.Create$261
    ,LoadFromStream$17$:function($){return $.ClassType.LoadFromStream$17.apply($.ClassType, arguments)}
 };
 var THdfDataTypeFixedPoint = {
@@ -1568,7 +1574,7 @@ var THdfDataTypeFixedPoint = {
       Self.FBitPrecision$2 = TStream.ReadIntegerExcept(Stream$24,2);
    }
    ,Destroy:TObject.Destroy
-   ,Create$256:THdfBaseDataType.Create$256
+   ,Create$261:THdfBaseDataType.Create$261
    ,LoadFromStream$17$:function($){return $.ClassType.LoadFromStream$17.apply($.ClassType, arguments)}
 };
 var THdfDataTypeEnumerated = {
@@ -1577,7 +1583,7 @@ var THdfDataTypeEnumerated = {
       THdfBaseDataType.$Init($);
    }
    ,Destroy:TObject.Destroy
-   ,Create$256:THdfBaseDataType.Create$256
+   ,Create$261:THdfBaseDataType.Create$261
    ,LoadFromStream$17:THdfBaseDataType.LoadFromStream$17
 };
 var THdfDataTypeCompoundPart = {
@@ -1588,20 +1594,20 @@ var THdfDataTypeCompoundPart = {
       $.FByteOffset = $.FSize$2 = 0;
       $.FDataType$2 = null;
    }
-   ,Create$258:function(Self, DatatypeMessage$2) {
-      Self.FDataType$2 = THdfDataObjectMessage.Create$251($New(THdfMessageDataType),DatatypeMessage$2.FSuperBlock,DatatypeMessage$2.FDataObject);
+   ,Create$263:function(Self, DatatypeMessage$2) {
+      Self.FDataType$2 = THdfDataObjectMessage.Create$256($New(THdfMessageDataType),DatatypeMessage$2.FSuperBlock,DatatypeMessage$2.FDataObject);
       Self.FSize$2 = DatatypeMessage$2.FSize;
       return Self
    }
    ,ReadFromStream:function(Self, Stream$25) {
       var ByteIndex$3 = 0;
-      var ByteValue$1 = 0;
+      var ByteValue = 0;
       var Temp$2 = 0;
       Self.FName$2 = "";
       do {
-         ByteValue$1 = TStream.ReadIntegerExcept(Stream$25,1);
-         Self.FName$2 = Self.FName$2+Chr(ByteValue$1);
-      } while (!(ByteValue$1==0));
+         ByteValue = TStream.ReadIntegerExcept(Stream$25,1);
+         Self.FName$2 = Self.FName$2+Chr(ByteValue);
+      } while (!(ByteValue==0));
       ByteIndex$3 = 0;
       do {
          Temp$2 = TStream.ReadIntegerExcept(Stream$25,1);
@@ -1618,27 +1624,27 @@ var THdfDataTypeCompound = {
       THdfBaseDataType.$Init($);
       $.FDataTypes = [];
    }
-   ,Create$256:function(Self, DatatypeMessage$3) {
-      THdfBaseDataType.Create$256(Self,DatatypeMessage$3);
+   ,Create$261:function(Self, DatatypeMessage$3) {
+      THdfBaseDataType.Create$261(Self,DatatypeMessage$3);
       return Self
    }
    ,LoadFromStream$17:function(Self, Stream$26) {
-      var Index$7 = 0;
+      var Index$6 = 0;
       var Count$4 = 0;
       var Part = null;
       if (Self.FDataTypeMessage.FVersion$1!=3) {
          throw Exception.Create($New(Exception),("Error unsupported compound version ("+Self.FDataTypeMessage.FVersion$1.toString()+")"));
       }
       Count$4 = (Self.FDataTypeMessage.FClassBitField[1]<<8)+Self.FDataTypeMessage.FClassBitField[0];
-      var $temp18;
-      for(Index$7=0,$temp18=Count$4;Index$7<$temp18;Index$7++) {
-         Part = THdfDataTypeCompoundPart.Create$258($New(THdfDataTypeCompoundPart),Self.FDataTypeMessage);
+      var $temp17;
+      for(Index$6=0,$temp17=Count$4;Index$6<$temp17;Index$6++) {
+         Part = THdfDataTypeCompoundPart.Create$263($New(THdfDataTypeCompoundPart),Self.FDataTypeMessage);
          THdfDataTypeCompoundPart.ReadFromStream(Part,Stream$26);
          Self.FDataTypes.push(Part);
       }
    }
    ,Destroy:TObject.Destroy
-   ,Create$256$:function($){return $.ClassType.Create$256.apply($.ClassType, arguments)}
+   ,Create$261$:function($){return $.ClassType.Create$261.apply($.ClassType, arguments)}
    ,LoadFromStream$17$:function($){return $.ClassType.LoadFromStream$17.apply($.ClassType, arguments)}
 };
 var THdfDataTypeBitfield = {
@@ -1652,7 +1658,7 @@ var THdfDataTypeBitfield = {
       Self.FBitPrecision$3 = TStream.ReadIntegerExcept(Stream$27,2);
    }
    ,Destroy:TObject.Destroy
-   ,Create$256:THdfBaseDataType.Create$256
+   ,Create$261:THdfBaseDataType.Create$261
    ,LoadFromStream$17$:function($){return $.ClassType.LoadFromStream$17.apply($.ClassType, arguments)}
 };
 var THdfDataTypeArray = {
@@ -1661,7 +1667,7 @@ var THdfDataTypeArray = {
       THdfBaseDataType.$Init($);
    }
    ,Destroy:TObject.Destroy
-   ,Create$256:THdfBaseDataType.Create$256
+   ,Create$261:THdfBaseDataType.Create$261
    ,LoadFromStream$17:THdfBaseDataType.LoadFromStream$17
 };
 var THdfDataObject = {
@@ -1682,55 +1688,56 @@ var THdfDataObject = {
    ,AddDataObject:function(Self, DataObject$8) {
       Self.FDataObjects.push(DataObject$8);
    }
-   ,Create$261:function(Self, SuperBlock$7, Name$8) {
-      THdfDataObject.Create$260(Self,SuperBlock$7);
+   ,Create$266:function(Self, SuperBlock$7, Name$8) {
+      THdfDataObject.Create$265(Self,SuperBlock$7);
       Self.FName$3 = Name$8;
       return Self
    }
-   ,Create$260:function(Self, SuperBlock$8) {
+   ,Create$265:function(Self, SuperBlock$8) {
       Self.FSuperBlock$4 = SuperBlock$8;
       Self.FName$3 = "";
-      Self.FDataType$3 = THdfDataObjectMessage.Create$251($New(THdfMessageDataType),Self.FSuperBlock$4,Self);
-      Self.FDataSpace = THdfDataObjectMessage.Create$251($New(THdfMessageDataSpace),Self.FSuperBlock$4,Self);
-      Self.FLinkInfo = THdfDataObjectMessage.Create$251($New(THdfMessageLinkInfo),Self.FSuperBlock$4,Self);
-      Self.FGroupInfo = THdfDataObjectMessage.Create$251($New(THdfMessageGroupInfo),Self.FSuperBlock$4,Self);
-      Self.FAttributeInfo = THdfDataObjectMessage.Create$251($New(THdfMessageAttributeInfo),Self.FSuperBlock$4,Self);
-      Self.FAttributesHeap = THdfFractalHeap.Create$254($New(THdfFractalHeap),Self.FSuperBlock$4,Self);
-      Self.FObjectsHeap = THdfFractalHeap.Create$254($New(THdfFractalHeap),Self.FSuperBlock$4,Self);
+      Self.FDataType$3 = THdfDataObjectMessage.Create$256($New(THdfMessageDataType),Self.FSuperBlock$4,Self);
+      Self.FDataSpace = THdfDataObjectMessage.Create$256($New(THdfMessageDataSpace),Self.FSuperBlock$4,Self);
+      Self.FLinkInfo = THdfDataObjectMessage.Create$256($New(THdfMessageLinkInfo),Self.FSuperBlock$4,Self);
+      Self.FGroupInfo = THdfDataObjectMessage.Create$256($New(THdfMessageGroupInfo),Self.FSuperBlock$4,Self);
+      Self.FAttributeInfo = THdfDataObjectMessage.Create$256($New(THdfMessageAttributeInfo),Self.FSuperBlock$4,Self);
+      Self.FAttributesHeap = THdfFractalHeap.Create$259($New(THdfFractalHeap),Self.FSuperBlock$4,Self);
+      Self.FObjectsHeap = THdfFractalHeap.Create$259($New(THdfFractalHeap),Self.FSuperBlock$4,Self);
+      Self.FData = TStream.Create$255($New(TStream),new ArrayBuffer(0));
       return Self
    }
    ,GetAttributeListCount:function(Self) {
       return Self.FAttributeList.length;
    }
-   ,GetAttributeListItem:function(Self, Index$8) {
+   ,GetAttributeListItem:function(Self, Index$7) {
       var Result = null;
-      if (Index$8<0||Index$8>=Self.FAttributeList.length) {
+      if (Index$7<0||Index$7>=Self.FAttributeList.length) {
+         throw Exception.Create($New(Exception),("Index out of bounds ("+Index$7.toString()+")"));
+      }
+      Result = Self.FAttributeList[Index$7];
+      return Result
+   }
+   ,GetDataLayoutChunk:function(Self, Index$8) {
+      var Result = 0;
+      if (Index$8<0||Index$8>=Self.FDataLayoutChunk.length) {
          throw Exception.Create($New(Exception),("Index out of bounds ("+Index$8.toString()+")"));
       }
-      Result = Self.FAttributeList[Index$8];
+      Result = Self.FDataLayoutChunk[Index$8];
       return Result
    }
-   ,GetDataLayoutChunk:function(Self, Index$9) {
-      var Result = 0;
-      if (Index$9<0||Index$9>=Self.FDataLayoutChunk.length) {
+   ,GetDataObject:function(Self, Index$9) {
+      var Result = null;
+      if (Index$9<0||Index$9>=Self.FDataObjects.length) {
          throw Exception.Create($New(Exception),("Index out of bounds ("+Index$9.toString()+")"));
       }
-      Result = Self.FDataLayoutChunk[Index$9];
-      return Result
-   }
-   ,GetDataObject:function(Self, Index$10) {
-      var Result = null;
-      if (Index$10<0||Index$10>=Self.FDataObjects.length) {
-         throw Exception.Create($New(Exception),("Index out of bounds ("+Index$10.toString()+")"));
-      }
-      Result = Self.FDataObjects[Index$10];
+      Result = Self.FDataObjects[Index$9];
       return Result
    }
    ,GetDataObjectCount:function(Self) {
       return Self.FDataObjects.length;
    }
    ,LoadFromStream$24:function(Self, Stream$28) {
-      Self.FSignature$2 = TStream.ReadTextExcept(Stream$28,4);
+      Self.FSignature$2 = TStream.ReadStringExcept(Stream$28,4);
       if (Self.FSignature$2!="OHDR") {
          throw Exception.Create($New(Exception),("Wrong signature ("+Self.FSignature$2.toString()+")"));
       }
@@ -1792,22 +1799,22 @@ var THdfDataObject = {
                DataObjectMessage = Self.FDataType$3;
                break;
             case 5 :
-               DataObjectMessage = THdfDataObjectMessage.Create$251($New(THdfMessageDataFill),Self.FSuperBlock$4,Self);
+               DataObjectMessage = THdfDataObjectMessage.Create$256($New(THdfMessageDataFill),Self.FSuperBlock$4,Self);
                break;
             case 8 :
-               DataObjectMessage = THdfDataObjectMessage.Create$251($New(THdfMessageDataLayout),Self.FSuperBlock$4,Self);
+               DataObjectMessage = THdfDataObjectMessage.Create$256($New(THdfMessageDataLayout),Self.FSuperBlock$4,Self);
                break;
             case 10 :
                DataObjectMessage = Self.FGroupInfo;
                break;
             case 11 :
-               DataObjectMessage = THdfDataObjectMessage.Create$251($New(THdfMessageFilterPipeline),Self.FSuperBlock$4,Self);
+               DataObjectMessage = THdfDataObjectMessage.Create$256($New(THdfMessageFilterPipeline),Self.FSuperBlock$4,Self);
                break;
             case 12 :
-               DataObjectMessage = THdfDataObjectMessage.Create$251($New(THdfMessageAttribute),Self.FSuperBlock$4,Self);
+               DataObjectMessage = THdfDataObjectMessage.Create$256($New(THdfMessageAttribute),Self.FSuperBlock$4,Self);
                break;
             case 16 :
-               DataObjectMessage = THdfDataObjectMessage.Create$251($New(THdfMessageHeaderContinuation),Self.FSuperBlock$4,Self);
+               DataObjectMessage = THdfDataObjectMessage.Create$256($New(THdfMessageHeaderContinuation),Self.FSuperBlock$4,Self);
                break;
             case 21 :
                DataObjectMessage = Self.FAttributeInfo;
@@ -1832,9 +1839,9 @@ var THdfAttribute = {
       $.FName$4 = "";
       $.FStream = null;
    }
-   ,Create$262:function(Self, Name$9) {
+   ,Create$267:function(Self, Name$9) {
       Self.FName$4 = Trim$_String_(Name$9);
-      Self.FStream = TStream.Create$250($New(TStream),new ArrayBuffer(0));
+      Self.FStream = TStream.Create$255($New(TStream),new ArrayBuffer(0));
       return Self
    }
    ,GetValueAsInteger:function(Self) {
@@ -1849,15 +1856,17 @@ var THdfAttribute = {
          Result = "";
          return Result;
       }
-      Result = TStream.ReadTextExcept(Self.FStream,TStream.a$35(Self.FStream));
+      Self.FStream.FPosition = 0;
+      Result = TStream.ReadStringExcept(Self.FStream,TStream.a$35(Self.FStream));
       return Result
    }
-   ,SetValueAsInteger:function(Self, Value$9) {
+   ,SetValueAsInteger:function(Self, Value$10) {
       TStream.Clear$1(Self.FStream);
-      TStream.WriteInteger(Self.FStream,4,Value$9);
+      TStream.WriteInteger(Self.FStream,4,Value$10);
    }
-   ,SetValueAsString:function(Self, Value$10) {
-      /* null */
+   ,SetValueAsString:function(Self, Value$11) {
+      TStream.Clear$1(Self.FStream);
+      TStream.WriteString(Self.FStream,Value$11);
    }
    ,Destroy:TObject.Destroy
 };

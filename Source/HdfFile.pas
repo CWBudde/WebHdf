@@ -481,6 +481,51 @@ type
 
 implementation
 
+resourcestring
+  RStrAllFiltersMustBeEnabled = 'All filters must be enabled';
+  RStrErrorReadingDimensions = 'Error reading dimensions';
+  RStrErrorSeekingFirstObject = 'Error seeking first object';
+  RStrErrorUnknownDataClass = 'Error: unknown data class';
+  RStrErrorUnsupportedCompoundVersion = 'Error unsupported compound version (%d)';
+  RStrFHDBType1UnsupportedValues = 'FHDB type 1 unsupported values';
+  RStrIndexOutOfBounds = 'Index out of bounds (%d)';
+  RStrInvalidBaseAddress = 'The base address should be zero';
+  RStrInvalidCount = 'Invalid count';
+  RStrInvalidHDF = 'The file is not a valid HDF';
+  RStrInvalidPosition = 'Invalid Position';
+  RStrInvalidVersion = 'Invalid version';
+  RStrNoHugeObjects = 'Cannot handle huge objects';
+  RStrNotImplemented = 'Not yet implemented';
+  RStrNoTinyObjects = 'Cannot handle tiny objects';
+  RStrPositionExceedsByteLength = 'Position exceeds byte length';
+  RStrSizeMismatch = 'Size mismatch';
+  RStrTooManyFilters = 'The filter pipeline message has too many filters';
+  RStrUnknownDatatype = 'Unknown datatype (%d)';
+  RStrUnsupportedBitOffset = 'Unsupported bit offset';
+  RStrUnsupportedBitPrecision = 'Unsupported bit precision';
+  RStrUnsupportedExponentBias = 'Unsupported exponent bias';
+  RStrUnsupportedExponentLocation = 'Unsupported exponent location';
+  RStrUnsupportedExponentSize = 'Unsupported exponent size';
+  RStrUnsupportedFilter = 'Unsupported filter';
+  RStrUnsupportedMantissaLocation = 'Unsupported mantissa location';
+  RStrUnsupportedMantissaSize = 'Unsupported mantissa size';
+  RStrUnsupportedOHDRMessageFlag = 'Unsupported OHDR message flag';
+  RStrUnsupportedValues = 'Unsupported values';
+  RStrUnsupportedVersion = 'Unsupported version';
+  RStrUnsupportedVersionOfAttributeInfoMessage = 'Unsupported version of attribute info message';
+  RStrUnsupportedVersionOfDataFillMessage = 'Unsupported version of data fill message';
+  RStrUnsupportedVersionOfDataLayoutMessage = 'Unsupported version of data layout message';
+  RStrUnsupportedVersionOfDataspaceMessage = 'Unsupported version of dataspace message';
+  RStrUnsupportedVersionOfDataTypeMessage = 'Unsupported version of data type message';
+  RStrUnsupportedVersionOfFractalHeap = 'Unsupported version of fractal heap';
+  RStrUnsupportedVersionOfGroupInfoMessage = 'Unsupported version of group info message';
+  RStrUnsupportedVersionOfLinkInfoMessage = 'Unsupported version of link info message';
+  RStrUnsupportedVersionOfCustomBlock = 'Unsupported version of custom block';
+  RStrUnsupportedVersionOfMessageAttribute = 'Unsupported version of message attribute';
+  RStrUnsupportedVersionOfTheFilterPipelineMessage = 'Unsupported version of the filter pipeline message';
+  RStrWrongSignature = 'Wrong signature (%s)';
+  RStrZeroBlockOffset = 'Only a block offset of 0 is supported so far';
+
 uses
   WHATWG.Console;
 
@@ -498,7 +543,7 @@ begin
   if FPosition + Count > FDataView.byteLength then
     raise Exception.Create(
       {$IFDEF Debug}'Error reading ' + ErrorMessage + '. ' + {$ENDIF}
-      'Position exceeds byte length');
+      RStrPositionExceedsByteLength);
 
   case Count of
     1:
@@ -528,7 +573,7 @@ begin
   if FPosition + Count > FDataView.byteLength then
     raise Exception.Create(
       {$IFDEF Debug}'Error reading ' + ErrorMessage + '. ' + {$ENDIF}
-      'Position exceeds byte length');
+      RStrPositionExceedsByteLength);
 
   var Decoder := JTextDecoder.Create;
   Result := Decoder.decode(FDataView.buffer.slice(FPosition, FPosition + Count));
@@ -546,7 +591,7 @@ begin
   if FPosition + Count > FDataView.byteLength then
     raise Exception.Create(
       {$IFDEF Debug}'Error reading ' + ErrorMessage + '. ' + {$ENDIF}
-      'Position exceeds byte length');
+      RStrPositionExceedsByteLength);
 
   Result := JUint8Array.Create(FDataView.buffer.slice(FPosition, FPosition + Count));
   Inc(FPosition, Count);
@@ -559,7 +604,7 @@ begin
     FPosition := FDataView.byteLength;
 
   if FPosition > FDataView.byteLength then
-    raise Exception.Create('Invalid Position');
+    raise Exception.Create(RStrInvalidPosition);
 
   Result := FPosition;
 end;
@@ -574,7 +619,7 @@ begin
     4:
       FDataView.setUint32(FPosition, Value);
     else
-      raise Exception.Create('Invalid count');
+      raise Exception.Create(RStrInvalidCount);
   end;
 
   Inc(FPosition, Count);
@@ -606,7 +651,7 @@ begin
   if FPosition + Count > FDataView.byteLength then
     raise Exception.Create(
       {$IFDEF Debug}'Error reading ' + ErrorMessage + '. ' + {$ENDIF}
-      'Position exceeds byte length');
+      RStrPositionExceedsByteLength);
 
   case Count of
     4:
@@ -627,20 +672,20 @@ procedure THdfSuperBlock.LoadFromStream(Stream: TStream);
 begin
   var Identifier := Stream.ReadIntegerExcept(1{$IFDEF Debug}, 'signature'{$ENDIF});
   if Identifier <> 137 then
-    raise Exception.Create('The file is not a valid HDF');
+    raise Exception.Create(RStrInvalidHDF);
 
   FFormatSignature := Stream.ReadStringExcept(3{$IFDEF Debug}, 'signature'{$ENDIF});
   if FFormatSignature <> 'HDF' then
-    raise Exception.Create('The file is not a valid HDF');
+    raise Exception.Create(RStrInvalidHDF);
 
   var FormatSignatureVersion := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'signature'{$ENDIF});
   if FormatSignatureVersion <> 169478669 then // was 218765834
-    raise Exception.Create('The file is not a valid HDF');
+    raise Exception.Create(RStrInvalidHDF);
 
   // read version
   FVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'version'{$ENDIF});
   if not (FVersion in [2, 3]) then
-    raise Exception.Create('Unsupported version');
+    raise Exception.Create(RStrUnsupportedVersion);
 
   // read offset & length size
   FOffsetSize := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'offset size'{$ENDIF});
@@ -662,22 +707,22 @@ begin
   FRootGroupObjectHeaderAddress := Stream.ReadIntegerExcept(FOffsetSize{$IFDEF DEBUG}, 'group object header address'{$ENDIF});
 
   if FBaseAddress <> 0 then
-    raise Exception.Create('The base address should be zero');
+    raise Exception.Create(RStrInvalidBaseAddress);
 
   if FEndOfFileAddress <> Stream.Size then
-    raise Exception.Create('Size mismatch');
+    raise Exception.Create(RStrSizeMismatch);
 
   // read checksum
   FChecksum := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'checksum'{$ENDIF});
 
   // read checksum
   if Stream.Seek(FRootGroupObjectHeaderAddress) <> FRootGroupObjectHeaderAddress then
-    raise Exception.Create('Error seeking first object');
+    raise Exception.Create(RStrErrorSeekingFirstObject);
 end;
 
 procedure THdfSuperBlock.SaveToStream(Stream: TStream);
 begin
-  raise Exception.Create('Not yet implemented');
+  raise Exception.Create(RStrNotImplemented);
 end;
 
 
@@ -697,7 +742,7 @@ end;
 
 procedure THdfDataObjectMessage.SaveToStream(Stream: TStream);
 begin
-  raise Exception.Create('Not yet implemented');
+  raise Exception.Create(RStrNotImplemented);
 end;
 
 
@@ -710,7 +755,7 @@ begin
   inherited LoadFromStream(Stream);
 
   if not (FVersion in [1, 2]) then
-    raise Exception.Create('Unsupported version of dataspace message');
+    raise Exception.Create(RStrUnsupportedVersionOfDataspaceMessage);
 
   // read dimensionality
   FDimensionality := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'dimensionality'{$ENDIF});
@@ -723,7 +768,7 @@ begin
   begin
     Stream.Seek(5, True);
 
-    raise Exception.Create('Unsupported version of dataspace message');
+    raise Exception.Create(RStrUnsupportedVersionOfDataspaceMessage);
   end;
 
   // read type
@@ -751,7 +796,7 @@ end;
 function THdfMessageDataSpace.GetDimension(Index: Integer): Integer;
 begin
   if (Index < 0) or (Index >= Length(FDimensionSize)) then
-    raise Exception.Create(Format('Index out of bounds (%d)', [Index]));
+    raise Exception.Create(Format(RStrIndexOutOfBounds, [Index]));
 
   Result := FDimensionSize[Index];
 end;
@@ -771,7 +816,7 @@ end;
 
 procedure THdfBaseDataType.SaveToStream(Stream: TStream);
 begin
-  raise Exception.Create('Not yet implemented');
+  raise Exception.Create(RStrNotImplemented);
 end;
 
 
@@ -800,33 +845,33 @@ begin
   FExponentBias := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'exponent bias'{$ENDIF});
 
   if (FBitOffset <> 0) then
-    raise Exception.Create('Unsupported bit offset');
+    raise Exception.Create(RStrUnsupportedBitOffset);
   if (FMantissaLocation <> 0) then
-    raise Exception.Create('Unsupported mantissa location');
+    raise Exception.Create(RStrUnsupportedMantissaLocation);
   if (FBitPrecision = 32) then
   begin
     if (FExponentLocation <> 23) then
-      raise Exception.Create('Unsupported exponent location');
+      raise Exception.Create(RStrUnsupportedExponentLocation);
     if (FExponentSize <> 8) then
-      raise Exception.Create('Unsupported exponent size');
+      raise Exception.Create(RStrUnsupportedExponentSize);
     if (FMantissaSize <> 23) then
-      raise Exception.Create('Unsupported mantissa size');
+      raise Exception.Create(RStrUnsupportedMantissaSize);
     if (FExponentBias <> 127) then
-      raise Exception.Create('Unsupported exponent bias');
+      raise Exception.Create(RStrUnsupportedExponentBias);
   end else
   if (FBitPrecision = 64) then
   begin
     if (FExponentLocation <> 52) then
-      raise Exception.Create('Unsupported exponent location');
+      raise Exception.Create(RStrUnsupportedExponentLocation);
     if (FExponentSize <> 11) then
-      raise Exception.Create('Unsupported exponent size');
+      raise Exception.Create(RStrUnsupportedExponentSize);
     if (FMantissaSize <> 52) then
-      raise Exception.Create('Unsupported mantissa size');
+      raise Exception.Create(RStrUnsupportedMantissaSize);
     if (FExponentBias <> 1023) then
-      raise Exception.Create('Unsupported exponent bias');
+      raise Exception.Create(RStrUnsupportedExponentBias);
   end
   else
-    raise Exception.Create('Unsupported bit precision');
+    raise Exception.Create(RStrUnsupportedBitPrecision);
 end;
 
 
@@ -893,7 +938,7 @@ var
   Part: THdfDataTypeCompoundPart;
 begin
   if (FDataTypeMessage.Version <> 3) then
-    raise Exception.Create(Format('Error unsupported compound version (%d)', [FDataTypeMessage.Version]));
+    raise Exception.Create(Format(RStrErrorUnsupportedCompoundVersion, [FDataTypeMessage.Version]));
 
   Count := FDataTypeMessage.FClassBitField[1] shl 8 + FDataTypeMessage.FClassBitField[0];
   for Index := 0 to Count - 1 do
@@ -933,7 +978,7 @@ begin
 
   // check version
   if not (FVersion in [1, 3]) then
-    raise Exception.Create('Unsupported version of data type message');
+    raise Exception.Create(RStrUnsupportedVersionOfDataTypeMessage);
 
   FClassBitField[0] := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'class bit field'{$ENDIF});
   FClassBitField[1] := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'class bit field'{$ENDIF});
@@ -965,7 +1010,7 @@ begin
     10:
       FDataType := THdfDataTypeArray.Create(Self);
     else
-      raise Exception.Create(Format('Unknown datatype (%d)', [FDataClass]));
+      raise Exception.Create(Format(RStrUnknownDatatype, [FDataClass]));
   end;
 
   if Assigned(FDataType) then
@@ -981,7 +1026,7 @@ begin
 
   // check version
   if FVersion <> 3 then
-    raise Exception.Create('Unsupported version of data fill message');
+    raise Exception.Create(RStrUnsupportedVersionOfDataFillMessage);
 
   // read flags
   FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
@@ -1006,7 +1051,7 @@ begin
 
   // check version
   if FVersion <> 3 then
-    raise Exception.Create('Unsupported version of data layout message');
+    raise Exception.Create(RStrUnsupportedVersionOfDataLayoutMessage);
 
   FLayoutClass := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'layout class'{$ENDIF});
   case FLayoutClass of
@@ -1067,12 +1112,12 @@ var
   Start: array of Integer;
 begin
   if DataObject.DataSpace.Dimensionality > 3 then
-    raise EHdfInvalidFormat.Create('Error reading dimensions');
+    raise EHdfInvalidFormat.Create(RStrErrorReadingDimensions);
 
   // read signature
   var Signature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if Signature <> 'TREE' then
-    raise Exception.Create(Format('Wrong signature (%s)', [string(Signature)]));
+    raise Exception.Create(Format(RStrWrongSignature, [Signature]));
 
   var NodeType := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'node type'{$ENDIF});
   var NodeLevel := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'node level'{$ENDIF});
@@ -1097,7 +1142,7 @@ begin
       var ChunkSize := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'chunk size'{$ENDIF});
       var FilterMask := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'filter mask'{$ENDIF});
       if FilterMask <> 0 then
-        raise Exception.Create('All filters must be enabled');
+        raise Exception.Create(RStrAllFiltersMustBeEnabled);
 
       Start.Clear;
       for var DimensionIndex := 0 to DataObject.DataSpace.Dimensionality - 1 do
@@ -1187,7 +1232,7 @@ begin
 
   // check version
   if FVersion <> 0 then
-    raise Exception.Create('Unsupported version of link info message');
+    raise Exception.Create(RStrUnsupportedVersionOfLinkInfoMessage);
 
   // read flags
   FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
@@ -1214,7 +1259,7 @@ begin
 
   // check version
   if FVersion <> 0 then
-    raise Exception.Create('Unsupported version of group info message');
+    raise Exception.Create(RStrUnsupportedVersionOfGroupInfoMessage);
 
   // read flags
   FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
@@ -1247,17 +1292,17 @@ begin
 
   // check version
   if FVersion <> 2 then
-    raise Exception.Create('Unsupported version of the filter pipeline message');
+    raise Exception.Create(RStrUnsupportedVersionOfTheFilterPipelineMessage);
 
   FFilters := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'filters'{$ENDIF});
   if FFilters > 32 then
-    raise Exception.Create('filter pipeline message has too many filters');
+    raise Exception.Create(RStrTooManyFilters);
 
   for Index := 0 to FFilters - 1 do
   begin
     FilterIdentificationValue := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'filter identification value'{$ENDIF});
     if not FilterIdentificationValue in [1, 2] then
-      raise Exception.Create('Unsupported filter');
+      raise Exception.Create(RStrUnsupportedFilter);
     Flags := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'flags'{$ENDIF});
     NumberClientDataValues := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'number client data values'{$ENDIF});
     for ValueIndex := 0 to NumberClientDataValues - 1 do
@@ -1341,7 +1386,7 @@ begin
         // TODO
       end;
     else
-      raise Exception.Create('Error: unknown data class');
+      raise Exception.Create(RStrErrorUnknownDataClass);
   end;
 end;
 
@@ -1366,7 +1411,7 @@ begin
 
   // check version
   if FVersion <> 3 then
-    raise Exception.Create('Unsupported version of group info message');
+    raise Exception.Create(RStrUnsupportedVersionOfMessageAttribute);
 
   // read flags
   FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
@@ -1409,7 +1454,7 @@ begin
   // read signature
   Signature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if Signature <> 'OCHK' then
-    raise Exception.Create(Format('Wrong signature (%s)', [string(Signature)]));
+    raise Exception.Create(Format(RStrWrongSignature, [Signature]));
 
   DataObject.ReadObjectHeaderMessages(Stream, FOffset + FLength);
 
@@ -1425,7 +1470,7 @@ begin
 
   // check version
   if FVersion <> 0 then
-    raise Exception.Create('Unsupported version of attribute info message');
+    raise Exception.Create(RStrUnsupportedVersionOfAttributeInfoMessage);
 
   // read flags
   FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
@@ -1456,12 +1501,12 @@ begin
   // read signature
   FSignature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if FSignature <> GetSignature then
-    raise Exception.Create(Format('Wrong signature (%s)', [string(FSignature)]));
+    raise Exception.Create(Format(RStrWrongSignature, [string(FSignature)]));
 
   // read version
   FVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'version'{$ENDIF});
   if FVersion <> 0 then
-    raise Exception.Create('Unsupported version of link info message');
+    raise Exception.Create(RStrUnsupportedVersionOfCustomBlock);
 
   // read heap header address
   FHeapHeaderAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'heap header address'{$ENDIF});
@@ -1473,7 +1518,7 @@ end;
 
 procedure THdfCustomBlock.SaveToStream(Stream: TStream);
 begin
-  raise Exception.Create('Not yet implemented');
+  raise Exception.Create(RStrNotImplemented);
 end;
 
 
@@ -1513,13 +1558,13 @@ begin
     begin
       var Temp := Stream.ReadIntegerExcept(5{$IFDEF DEBUG}, 'magic'{$ENDIF});
       if Temp <> $40008 then
-        raise Exception.Create('Unsupported values');
+        raise Exception.Create(RStrUnsupportedValues);
 
       var Name := Stream.ReadStringExcept(LengthX{$IFDEF Debug}, 'name'{$ENDIF});
 
       Temp := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'magic'{$ENDIF});
       if (Temp <> $13) then
-        raise Exception.Create('Unsupported values');
+        raise Exception.Create(RStrUnsupportedValues);
 
       LengthX := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'length'{$ENDIF});
       var ValueType := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'unknown value'{$ENDIF});
@@ -1538,7 +1583,7 @@ begin
     begin
       var Temp := Stream.ReadIntegerExcept(6{$IFDEF DEBUG}, 'magic'{$ENDIF});
       if Temp <> 0 then
-        raise Exception.Create('FHDB type 1 unsupported values');
+        raise Exception.Create(RStrFHDBType1UnsupportedValues);
 
       // read name
       LengthX := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'length'{$ENDIF});
@@ -1590,7 +1635,7 @@ begin
   inherited LoadFromStream(Stream);
 
   if FBlockOffset <> 0 then
-    raise Exception.Create('Only a block offset of 0 is supported so far');
+    raise Exception.Create(RStrZeroBlockOffset);
 
   // The number of rows of blocks, nrows, in an indirect block of size iblock_size is given by the following expression:
   RowsCount := Round(log2(FInitialBlockSize) - log2(FFractalHeap.StartingBlockSize)) + 1;
@@ -1666,12 +1711,12 @@ begin
   // read signature
   FSignature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if FSignature <> 'FRHP' then
-    raise Exception.Create(Format('Wrong signature (%s)', [string(FSignature)]));
+    raise Exception.Create(Format(RStrWrongSignature, [FSignature]));
 
   // read version
   FVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'version'{$ENDIF});
   if FVersion <> 0 then
-    raise Exception.Create('Unsupported version of link info message');
+    raise Exception.Create(RStrUnsupportedVersionOfFractalHeap);
 
   FHeapIdLength := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'heap ID length'{$ENDIF});
   FEncodedLength := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'I/O filters'' encoded length'{$ENDIF});
@@ -1704,10 +1749,10 @@ begin
   end;
 
   if (FNumberOfHugeObjects > 0) then
-    raise Exception.Create('Cannot handle huge objects');
+    raise Exception.Create(RStrNoHugeObjects);
 
   if (FNumberOfTinyObjects > 0) then
-    raise Exception.Create('Cannot handle tiny objects');
+    raise Exception.Create(RStrNoTinyObjects);
 
   if (FAddressOfRootBlock > 0) and (FAddressOfRootBlock < Superblock.EndOfFileAddress) then
   begin
@@ -1723,7 +1768,7 @@ end;
 
 procedure THdfFractalHeap.SaveToStream(Stream: TStream);
 begin
-  raise Exception.Create('Not yet implemented');
+  raise Exception.Create(RStrNotImplemented);
 end;
 
 
@@ -1771,7 +1816,7 @@ end;
 function THdfDataObject.GetAttributeListItem(Index: Integer): THdfAttribute;
 begin
   if (Index < 0) or (Index >= FAttributeList.Count) then
-    raise Exception.Create(Format('Index out of bounds (%d)', [Index]));
+    raise Exception.Create(Format(RStrIndexOutOfBounds, [Index]));
 
   Result := THdfAttribute(FAttributeList[Index]);
 end;
@@ -1779,7 +1824,7 @@ end;
 function THdfDataObject.GetDataLayoutChunk(Index: Integer): Integer;
 begin
   if (Index < 0) or (Index >= Length(FDataLayoutChunk)) then
-    raise Exception.Create(Format('Index out of bounds (%d)', [Index]));
+    raise Exception.Create(Format(RStrIndexOutOfBounds, [Index]));
 
   Result := FDataLayoutChunk[Index];
 end;
@@ -1792,7 +1837,7 @@ end;
 function THdfDataObject.GetDataObject(Index: Integer): THdfDataObject;
 begin
   if (Index < 0) or (Index >= FDataObjects.Count) then
-    raise Exception.Create(Format('Index out of bounds (%d)', [Index]));
+    raise Exception.Create(Format(RStrIndexOutOfBounds, [Index]));
 
   Result := THdfDataObject(FDataObjects[Index]);
 end;
@@ -1826,12 +1871,12 @@ procedure THdfDataObject.LoadFromStream(Stream: TStream);
 begin
   FSignature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if FSignature <> 'OHDR' then
-    raise Exception.Create(Format('Wrong signature (%s)', [string(FSignature)]));
+    raise Exception.Create(Format(RStrWrongSignature, [string(FSignature)]));
 
   // read version
   FVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'version'{$ENDIF});
   if FVersion <> 2 then
-    raise Exception.Create('Invalid verion');
+    raise Exception.Create(RStrInvalidVersion);
 
   FFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'flags'{$ENDIF});
 
@@ -1874,7 +1919,7 @@ end;
 
 procedure THdfDataObject.SaveToStream(Stream: TStream);
 begin
-  raise Exception.Create('Not yet implemented');
+  raise Exception.Create(RStrNotImplemented);
 end;
 
 procedure THdfDataObject.ReadObjectHeaderMessages(Stream: TStream; EndOfStream: Integer);
@@ -1892,7 +1937,7 @@ begin
     MessageFlags := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'message flags'{$ENDIF});
 
     if (MessageFlags and not 5) <> 0 then
-      raise Exception.Create('Unsupported OHDR message flag');
+      raise Exception.Create(RStrUnsupportedOHDRMessageFlag);
 
     // eventually skip creation order
     if FFlags and (1 shl 2) <> 0 then
@@ -1970,7 +2015,7 @@ end;
 
 procedure THdfFile.SaveToStream(Stream: TStream);
 begin
-  raise Exception.Create('Not yet implemented');
+  raise Exception.Create(RStrNotImplemented);
 end;
 
 procedure THdfFile.LoadFromBuffer(Buffer: JArrayBuffer);
