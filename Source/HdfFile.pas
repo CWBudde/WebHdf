@@ -5,7 +5,7 @@ interface
 {-$DEFINE Debug}
 
 uses
-  ECMA.TypedArray;
+  ECMA.TypedArray, WHATWG.Encoding;
 
 type
   EHdfInvalidFormat = class(Exception);
@@ -24,11 +24,14 @@ type
   public
     constructor Create(Buffer: JArrayBuffer);
 
-    function ReadTextExcept(const Count: Integer {$IFDEF Debug}; const ErrorMessage: String{$ENDIF}): String; overload;
+    function ReadStringExcept(const Count: Integer {$IFDEF Debug}; const ErrorMessage: String{$ENDIF}): String; overload;
     function ReadIntegerExcept(const Count: Integer {$IFDEF Debug}; const ErrorMessage: String{$ENDIF}): Integer; overload;
     function ReadBufferExcept(const Count: Integer {$IFDEF Debug}; const ErrorMessage: String{$ENDIF}): JUint8Array; overload;
+    function ReadFloat(const Count: Integer): Float; overload;
 
-    procedure WriteInteger(const Count: Integer; Value: Integer);
+    procedure WriteInteger(const Count: Integer; const Value: Integer);
+    procedure WriteString(const Value: String);
+    procedure WriteBuffer(Buffer: JUInt8Array);
     procedure Clear;
 
     function Seek(Position: Integer; IsRelative: Boolean = False): Integer;
@@ -402,7 +405,7 @@ type
 
     FDataLayoutChunk: TArrayOfInteger;
 
-    FData: JUint8Array;
+    FData: TStream;
     FAttributeList: array of THdfAttribute;
 
     FDataType: THdfMessageDataType;
@@ -438,10 +441,10 @@ type
     procedure SaveToStream(Stream: TStream);
 
     function HasAttribute(Name: string): Boolean;
-    function GetAttribute(Name: string): string;
+    function GetAttribute(Name: string): String;
 
     property Name: String read FName;
-    property Data: JUint8Array read FData write FData;
+    property Data: TStream read FData write FData;
     property DataType: THdfMessageDataType read FDataType;
     property DataSpace: THdfMessageDataSpace read FDataSpace;
     property LinkInfo: THdfMessageLinkInfo read FLinkInfo;
@@ -519,7 +522,7 @@ begin
   Inc(FPosition, Count);
 end;
 
-function TStream.ReadTextExcept(const Count: Integer{$IFDEF Debug};
+function TStream.ReadStringExcept(const Count: Integer{$IFDEF Debug};
   const ErrorMessage: String{$ENDIF}): String;
 begin
   if FPosition + Count > FDataView.byteLength then
@@ -527,13 +530,12 @@ begin
       {$IFDEF Debug}'Error reading ' + ErrorMessage + '. ' + {$ENDIF}
       'Position exceeds byte length');
 
-  Result := '';
-  for var Index := 0 to Count - 1 do
-  begin
-    var ByteValue := FDataView.getUint8(FPosition + Index);
+  var Decoder := JTextDecoder.Create;
+  Result := Decoder.decode(FDataView.buffer.slice(FPosition, FPosition + Count));
 
-    Result := Result + Chr(ByteValue);
-  end;
+  // eventually strip #0 character at the end
+  if Ord(Result[High(Result)]) = 0 then
+    Result := Result.DeleteRight(1);
 
   Inc(FPosition, Count);
 end;
@@ -562,7 +564,7 @@ begin
   Result := FPosition;
 end;
 
-procedure TStream.WriteInteger(const Count: Integer; Value: Integer);
+procedure TStream.WriteInteger(const Count: Integer; const Value: Integer);
 begin
   case Count of
     1:
@@ -578,9 +580,44 @@ begin
   Inc(FPosition, Count);
 end;
 
+procedure TStream.WriteString(const Value: String);
+begin
+  var Encoder := JTextEncoder.Create;
+  WriteBuffer(Encoder.Encode(Value));
+end;
+
 procedure TStream.Clear;
 begin
   FPosition := 0;
+end;
+
+procedure TStream.WriteBuffer(Buffer: JUint8Array);
+begin
+  var OldBuffer := JUint8Array(FDataView.buffer);
+  var NewBuffer := JUint8Array.Create(OldBuffer.byteLength + Buffer.byteLength);
+  NewBuffer.set(OldBuffer, 0);
+  NewBuffer.set(Buffer, OldBuffer.byteLength);
+  FDataView := JDataView.Create(NewBuffer.buffer);
+  FPosition := NewBuffer.byteLength;
+end;
+
+function TStream.ReadFloat(const Count: Integer): Float;
+begin
+  if FPosition + Count > FDataView.byteLength then
+    raise Exception.Create(
+      {$IFDEF Debug}'Error reading ' + ErrorMessage + '. ' + {$ENDIF}
+      'Position exceeds byte length');
+
+  case Count of
+    4:
+      Result := FDataView.getFloat32(FPosition, True);
+    8:
+      Result := FDataView.getFloat64(FPosition, True);
+    else
+      raise Exception.Create({$IFDEF Debug}'Error reading ' + ErrorMessage{$ELSE}'Unknown bit width'{$ENDIF});
+  end;
+
+  Inc(FPosition, Count);
 end;
 
 
@@ -592,7 +629,7 @@ begin
   if Identifier <> 137 then
     raise Exception.Create('The file is not a valid HDF');
 
-  FFormatSignature := Stream.ReadTextExcept(3{$IFDEF Debug}, 'signature'{$ENDIF});
+  FFormatSignature := Stream.ReadStringExcept(3{$IFDEF Debug}, 'signature'{$ENDIF});
   if FFormatSignature <> 'HDF' then
     raise Exception.Create('The file is not a valid HDF');
 
@@ -979,7 +1016,7 @@ begin
         FDataSize := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'data size'{$ENDIF});
 
         // read raw data
-        DataObject.Data := Stream.ReadBufferExcept(FDataSize{$IFDEF DEBUG}, 'from buffer'{$ENDIF});
+        DataObject.Data.WriteBuffer(Stream.ReadBufferExcept(FDataSize{$IFDEF DEBUG}, 'from buffer'{$ENDIF}));
       end;
     1: // continous storage
       begin
@@ -992,7 +1029,7 @@ begin
           StreamPos := Stream.Position;
           Stream.Position := FDataAddress;
 
-          DataObject.Data := Stream.ReadBufferExcept(FDataSize{$IFDEF DEBUG}, 'from buffer'{$ENDIF});
+          DataObject.Data.WriteBuffer(Stream.ReadBufferExcept(FDataSize{$IFDEF DEBUG}, 'from buffer'{$ENDIF}));
 
           Stream.Position := StreamPos;
         end;
@@ -1027,12 +1064,13 @@ end;
 procedure THdfMessageDataLayout.ReadTree(Stream: TStream; Size: Integer);
 var
   Key: Integer; // was Int64
+  Start: array of Integer;
 begin
   if DataObject.DataSpace.Dimensionality > 3 then
     raise EHdfInvalidFormat.Create('Error reading dimensions');
 
   // read signature
-  var Signature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
+  var Signature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if Signature <> 'TREE' then
     raise Exception.Create(Format('Wrong signature (%s)', [string(Signature)]));
 
@@ -1061,7 +1099,7 @@ begin
       if FilterMask <> 0 then
         raise Exception.Create('All filters must be enabled');
 
-      var Start: array of Integer;
+      Start.Clear;
       for var DimensionIndex := 0 to DataObject.DataSpace.Dimensionality - 1 do
       begin
         var StartPos := Stream.ReadIntegerExcept(8{$IFDEF DEBUG}, 'start'{$ENDIF});
@@ -1135,15 +1173,7 @@ begin
     end;
   end;
 
-  if not Assigned(DataObject.Data) then
-    DataObject.Data := Output
-  else
-  begin
-    var OldData := DataObject.Data;
-    DataObject.Data := JUint8Array.Create(OldData.byteLength + Output.byteLength);
-    DataObject.Data.set(OldData, 0);
-    DataObject.Data.set(Output, OldData.byteLength);
-  end;
+  DataObject.Data.WriteBuffer(Output);
 
   var CheckSum := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'checksum'{$ENDIF});
 end;
@@ -1240,7 +1270,7 @@ end;
 
 constructor THdfAttribute.Create(Name: String);
 begin
-  FName := Trim(Name);
+  FName := Name;
   FStream := TStream.Create(JArrayBuffer.Create(0));
 end;
 
@@ -1252,7 +1282,8 @@ begin
     Exit;
   end;
 
-  Result := FStream.ReadTextExcept(FStream.Size{$IFDEF Debug}, 'value as string'{$ENDIF});
+  FStream.Position := 0;
+  Result := FStream.ReadStringExcept(FStream.Size{$IFDEF Debug}, 'value as string'{$ENDIF});
 end;
 
 procedure THdfAttribute.SetValueAsInteger(const Value: Integer);
@@ -1268,19 +1299,9 @@ begin
 end;
 
 procedure THdfAttribute.SetValueAsString(const Value: String);
-(*
-var
-  StringStream: TStringStream;
 begin
-  StringStream := TStringStream.Create(Trim(string(Value)));
-  try
-    FStream.Clear;
-    FStream.CopyFrom(StringStream, StringStream.Size);
-  finally
-    StringStream.Free;
-  end;
-*)
-begin
+  FStream.Clear;
+  FStream.WriteString(Value);
 end;
 
 { THdfMessageAttribute }
@@ -1296,7 +1317,7 @@ begin
     3:
       begin
         SetLength(Name, FDatatypeMessage.Size);
-        Name := Stream.ReadTextExcept(FDatatypeMessage.Size{$IFDEF Debug}, 'string'{$ENDIF});
+        Name := Stream.ReadStringExcept(FDatatypeMessage.Size{$IFDEF Debug}, 'string'{$ENDIF});
         Attribute.ValueAsString := Name;
       end;
     6:
@@ -1340,8 +1361,6 @@ begin
 end;
 
 procedure THdfMessageAttribute.LoadFromStream(Stream: TStream);
-var
-  Attribute: THdfAttribute;
 begin
   inherited LoadFromStream(Stream);
 
@@ -1357,7 +1376,7 @@ begin
   FDataspaceSize := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'dataspace size'{$ENDIF});
   FEncoding := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'encoding'{$ENDIF});
 
-  FName := Stream.ReadTextExcept(FNameSize{$IFDEF Debug}, 'name'{$ENDIF});
+  FName := Stream.ReadStringExcept(FNameSize{$IFDEF Debug}, 'name'{$ENDIF});
 
   FDatatypeMessage := THdfMessageDataType.Create(Superblock, DataObject);
   FDatatypeMessage.LoadFromStream(Stream);
@@ -1365,7 +1384,7 @@ begin
   FDataspaceMessage := THdfMessageDataSpace.Create(Superblock, DataObject);
   FDataspaceMessage.LoadFromStream(Stream);
 
-  Attribute := THdfAttribute.Create(FName);
+  var Attribute := THdfAttribute.Create(FName);
   DataObject.AddAttribute(Attribute);
 
   if FDataspaceMessage.Dimensionality = 0 then
@@ -1388,7 +1407,7 @@ begin
   Stream.Position := FOffset;
 
   // read signature
-  Signature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
+  Signature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if Signature <> 'OCHK' then
     raise Exception.Create(Format('Wrong signature (%s)', [string(Signature)]));
 
@@ -1435,7 +1454,7 @@ end;
 procedure THdfCustomBlock.LoadFromStream(Stream: TStream);
 begin
   // read signature
-  FSignature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
+  FSignature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if FSignature <> GetSignature then
     raise Exception.Create(Format('Wrong signature (%s)', [string(FSignature)]));
 
@@ -1469,9 +1488,6 @@ procedure THdfDirectBlock.LoadFromStream(Stream: TStream);
 var
   OffsetSize, LengthSize: Integer; // was Int64
   TypeAndVersion: Integer; // was Byte
-  OffsetX, LengthX: Integer; // was Int64
-  Name, Value: String;
-  Attribute: THdfAttribute;
   HeapHeaderAddress: Integer; // was Int64
   StreamPos: Integer; // was Int64
   SubDataObject: THdfDataObject;
@@ -1490,21 +1506,17 @@ begin
   repeat
     TypeAndVersion := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'type and version'{$ENDIF});
 
-    OffsetX := 0;
-    LengthX := 0;
-    OffsetX := Stream.ReadIntegerExcept(OffsetSize{$IFDEF DEBUG}, 'offset'{$ENDIF});
-    LengthX := Stream.ReadIntegerExcept(LengthSize{$IFDEF DEBUG}, 'length'{$ENDIF});
+    var OffsetX := Stream.ReadIntegerExcept(OffsetSize{$IFDEF DEBUG}, 'offset'{$ENDIF});
+    var LengthX := Stream.ReadIntegerExcept(LengthSize{$IFDEF DEBUG}, 'length'{$ENDIF});
 
     if (TypeAndVersion = 3) then
     begin
-      var Temp := 0;
-      Temp := Stream.ReadIntegerExcept(5{$IFDEF DEBUG}, 'magic'{$ENDIF});
+      var Temp := Stream.ReadIntegerExcept(5{$IFDEF DEBUG}, 'magic'{$ENDIF});
       if Temp <> $40008 then
         raise Exception.Create('Unsupported values');
 
-      Name := Stream.ReadTextExcept(LengthX{$IFDEF Debug}, 'name'{$ENDIF});
+      var Name := Stream.ReadStringExcept(LengthX{$IFDEF Debug}, 'name'{$ENDIF});
 
-      Temp := 0;
       Temp := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'magic'{$ENDIF});
       if (Temp <> $13) then
         raise Exception.Create('Unsupported values');
@@ -1512,13 +1524,11 @@ begin
       LengthX := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'length'{$ENDIF});
       var ValueType := Stream.ReadIntegerExcept(4{$IFDEF DEBUG}, 'unknown value'{$ENDIF});
       var TypeExtend := Stream.ReadIntegerExcept(2{$IFDEF DEBUG}, 'unknown value'{$ENDIF});
-      if (ValueType = $20000) then
-        if (TypeExtend = 0) then
-          Value := Stream.ReadTextExcept(LengthX{$IFDEF Debug}, 'value'{$ENDIF})
-        else if (TypeExtend = 200) then
-          Value := '';
+      var Value := '';
+      if (ValueType = $20000) and (TypeExtend = 0) then
+        Value := Stream.ReadStringExcept(LengthX{$IFDEF Debug}, 'value'{$ENDIF});
 
-      Attribute := THdfAttribute.Create(Name);
+      var Attribute := THdfAttribute.Create(Name);
       Attribute.ValueAsString := Value;
 
       FDataObject.AddAttribute(Attribute);
@@ -1526,20 +1536,19 @@ begin
     else
     if (TypeAndVersion = 1) then
     begin
-      var Temp := 0;
-      Temp := Stream.ReadIntegerExcept(6{$IFDEF DEBUG}, 'magic'{$ENDIF});
+      var Temp := Stream.ReadIntegerExcept(6{$IFDEF DEBUG}, 'magic'{$ENDIF});
       if Temp <> 0 then
         raise Exception.Create('FHDB type 1 unsupported values');
 
-      // read name  
+      // read name
       LengthX := Stream.ReadIntegerExcept(1{$IFDEF DEBUG}, 'length'{$ENDIF});
-      Name := Stream.ReadTextExcept(LengthX{$IFDEF Debug}, 'name'{$ENDIF});
+      var Name := Stream.ReadStringExcept(LengthX{$IFDEF Debug}, 'name'{$ENDIF});
 
       // read heap header address
       HeapHeaderAddress := Stream.ReadIntegerExcept(SuperBlock.OffsetSize{$IFDEF DEBUG}, 'heap header address'{$ENDIF});
 
       StreamPos := Stream.Position;
-      
+
       Stream.Position := HeapHeaderAddress;
 
       SubDataObject := THdfDataObject.Create(SuperBlock, Name);
@@ -1655,7 +1664,7 @@ var
   Block: THdfCustomBlock;
 begin
   // read signature
-  FSignature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
+  FSignature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if FSignature <> 'FRHP' then
     raise Exception.Create(Format('Wrong signature (%s)', [string(FSignature)]));
 
@@ -1734,6 +1743,8 @@ begin
 
   FAttributesHeap := THdfFractalHeap.Create(FSuperBlock, Self);
   FObjectsHeap := THdfFractalHeap.Create(FSuperBlock, Self);
+
+  FData := TStream.Create(JArrayBuffer.Create(0));
 end;
 
 procedure THdfDataObject.AddAttribute(Attribute: THdfAttribute);
@@ -1797,8 +1808,8 @@ var
 begin
   Result := False;
   for Index := 0 to AttributeListCount - 1 do
-    if string(AttributeListItem[Index].Name) = Name then
-      Exit(True);
+    if AttributeListItem[Index].Name = Name then
+      exit(True);
 end;
 
 function THdfDataObject.GetAttribute(Name: string): string;
@@ -1807,13 +1818,13 @@ var
 begin
   Result := '';
   for Index := 0 to AttributeListCount - 1 do
-    if string(AttributeListItem[Index].Name) = Name then
-      Exit(string(AttributeListItem[Index].ValueAsString));
+    if AttributeListItem[Index].Name = Name then
+      exit(AttributeListItem[Index].ValueAsString);
 end;
 
 procedure THdfDataObject.LoadFromStream(Stream: TStream);
 begin
-  FSignature := Stream.ReadTextExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
+  FSignature := Stream.ReadStringExcept(4{$IFDEF Debug}, 'signature'{$ENDIF});
   if FSignature <> 'OHDR' then
     raise Exception.Create(Format('Wrong signature (%s)', [string(FSignature)]));
 

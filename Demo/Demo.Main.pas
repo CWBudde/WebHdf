@@ -33,10 +33,9 @@ type
     procedure AddText(Text: String);
     procedure LoadHdfFile(Buffer: JArrayBuffer);
     procedure PrintFileInformation(HdfFile: THdfFile);
+    procedure PrintDataObjectInformation(DataObject: THdfDataObject; Indent: Integer);
   public
     constructor Create(Owner: IHtmlElementOwner); overload; override;
-
-    procedure PrintDataObjectInformation(DataObject: THdfDataObject; Indent: Integer);
   end;
 
 var
@@ -137,7 +136,7 @@ begin
   end;
 
   if Assigned(DataObject.Data) then
-    AddText(IndentStr + 'Data Size: ' + IntToStr(DataObject.Data.byteLength));
+    AddText(IndentStr + 'Data Size: ' + IntToStr(DataObject.Data.Size));
 
   // write data objects
   if DataObject.DataObjectCount > 0 then
